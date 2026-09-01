@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm/relations";
-import { users, invitations,  teams, projects, sprints, requirements, backlog, tasks, aiPredictions, activityLogs, notifications, teamMembers, projectMembers } from "./schema";
+import { users, invitations,  teams, projects, sprints, requirements, backlog, tasks, aiPredictions, activityLogs, notifications, teamMembers, projectMembers } from "../schema";
 
 export const invitationsRelations = relations(invitations, ({one}) => ({
 	user: one(users, {

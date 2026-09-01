@@ -1,4 +1,4 @@
-import { db } from "@/db";
+import { db } from "@supabase/client";
 import { sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
