@@ -126,13 +126,6 @@ const approvedRecommendations = [
   },
 ];
 
-function getPriorityBadgeVariant(priority: string) {
-  if (priority === "high") return "danger";
-  if (priority === "medium") return "warning";
-  if (priority === "low") return "success";
-  return "default";
-}
-
 export default function AIRecommendationsPage() {
   const router = useRouter();
   const [selectedRecommendation, setSelectedRecommendation] = React.useState(
@@ -175,16 +168,16 @@ export default function AIRecommendationsPage() {
         ]}
         primaryAction={{
           label: "Run Analysis",
-          onClick: () => { },
+          onClick: () => {},
         }}
         secondaryActions={[
           {
             label: "Export",
-            onClick: () => { },
+            onClick: () => {},
           },
           {
             label: "Settings",
-            onClick: () => { },
+            onClick: () => {},
           },
         ]}
       />
@@ -196,24 +189,26 @@ export default function AIRecommendationsPage() {
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <div
-                  className={`h-10 w-10 rounded-lg flex items-center justify-center ${stat.color === "rose"
+                  className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                    stat.color === "rose"
                       ? "bg-rose-100"
                       : stat.color === "amber"
-                        ? "bg-amber-100"
-                        : stat.color === "emerald"
-                          ? "bg-emerald-100"
-                          : "bg-slate-100"
-                    }`}
+                      ? "bg-amber-100"
+                      : stat.color === "emerald"
+                      ? "bg-emerald-100"
+                      : "bg-slate-100"
+                  }`}
                 >
                   <stat.icon
-                    className={`h-5 w-5 ${stat.color === "rose"
+                    className={`h-5 w-5 ${
+                      stat.color === "rose"
                         ? "text-rose-600"
                         : stat.color === "amber"
-                          ? "text-amber-600"
-                          : stat.color === "emerald"
-                            ? "text-emerald-600"
-                            : "text-slate-600"
-                      }`}
+                        ? "text-amber-600"
+                        : stat.color === "emerald"
+                        ? "text-emerald-600"
+                        : "text-slate-600"
+                    }`}
                   />
                 </div>
                 <div>
@@ -244,10 +239,11 @@ export default function AIRecommendationsPage() {
                   <button
                     key={rec.id}
                     onClick={() => setSelectedRecommendation(rec)}
-                    className={`w-full text-left p-4 hover:bg-slate-50 transition-colors ${selectedRecommendation?.id === rec.id
+                    className={`w-full text-left p-4 hover:bg-slate-50 transition-colors ${
+                      selectedRecommendation?.id === rec.id
                         ? "bg-slate-50 border-l-4 border-slate-900"
                         : "border-l-4 border-transparent"
-                      }`}
+                    }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <span className="font-mono text-xs text-slate-400">
@@ -262,9 +258,6 @@ export default function AIRecommendationsPage() {
                     </p>
                     <div className="flex items-center gap-3">
                       <PriorityChip priority={rec.suggestedPriority} size="sm" />
-                      <Badge variant={getPriorityBadgeVariant(rec.suggestedPriority) as never} size="sm">
-                        Predicted {rec.suggestedPriority.charAt(0).toUpperCase() + rec.suggestedPriority.slice(1)}
-                      </Badge>
                       <span className="text-xs text-slate-500">
                         {rec.suggestedSprint}
                       </span>
@@ -339,37 +332,29 @@ export default function AIRecommendationsPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-slate-500">
-                        Predicted Priority
+                        Suggested Priority
                       </span>
-                      <Badge
-                        variant={getPriorityBadgeVariant(selectedRecommendation.suggestedPriority) as never}
-                      >
-                        {selectedRecommendation.suggestedPriority.charAt(0).toUpperCase() +
-                          selectedRecommendation.suggestedPriority.slice(1)}
-                      </Badge>
+                      <PriorityChip
+                        priority={selectedRecommendation.suggestedPriority}
+                      />
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-slate-500">Prediction Confidence</span>
+                      <span className="text-sm text-slate-500">
+                        Suggested Sprint
+                      </span>
+                      <span className="text-sm font-medium text-slate-900">
+                        {selectedRecommendation.suggestedSprint}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-slate-500">
+                        Confidence Score
+                      </span>
                       <span className="text-sm font-medium text-slate-900">
                         {selectedRecommendation.confidence}%
                       </span>
                     </div>
-                    <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4">
-                      <p className="text-sm font-medium text-slate-900 mb-1">
-                        AI Explanation / SHAP rationale
-                      </p>
-                      <p className="text-sm text-slate-600">
-                        {selectedRecommendation.summary}
-                      </p>
-                    </div>
                   </div>
-                </div>
-
-                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
-                  <span className="text-sm text-slate-500">Suggested Sprint</span>
-                  <span className="text-sm font-medium text-slate-900">
-                    {selectedRecommendation.suggestedSprint}
-                  </span>
                 </div>
 
                 {/* Summary */}
