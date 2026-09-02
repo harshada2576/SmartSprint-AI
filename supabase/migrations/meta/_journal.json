@@ -8,6 +8,13 @@
       "when": 1788167491589,
       "tag": "0000_overjoyed_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788363695615,
+      "tag": "0001_add_organizations_and_governance",
+      "breakpoints": true
     }
   ]
 }
