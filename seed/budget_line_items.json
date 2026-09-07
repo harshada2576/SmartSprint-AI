@@ -1,0 +1,875 @@
+[
+  {
+    "id": "01952ae4-242a-4d97-9323-ef341ba61810",
+    "project_id": "2a47513a-1d92-4e85-8f1d-23b55a1cf476",
+    "category": "Design",
+    "allocated": 1544976.28,
+    "spent": 676662.29,
+    "created_at": "2025-06-20T21:01:13.000Z",
+    "updated_at": "2026-06-20T20:37:42.000Z"
+  },
+  {
+    "id": "a543bbbc-9d52-4f7c-b1ee-233aca87a10c",
+    "project_id": "2a47513a-1d92-4e85-8f1d-23b55a1cf476",
+    "category": "Deployment",
+    "allocated": 747839.36,
+    "spent": 161012.21,
+    "created_at": "2025-06-20T22:42:28.000Z",
+    "updated_at": "2026-09-01T04:57:37.000Z"
+  },
+  {
+    "id": "60c3bf90-345c-4ac8-8669-df056cb7b692",
+    "project_id": "2a47513a-1d92-4e85-8f1d-23b55a1cf476",
+    "category": "Engineering",
+    "allocated": 1663494.51,
+    "spent": 356478.2,
+    "created_at": "2025-06-19T16:20:20.000Z",
+    "updated_at": "2026-01-13T14:34:33.000Z"
+  },
+  {
+    "id": "d9a08eb6-8ce5-48c9-acb8-536dff563852",
+    "project_id": "2a47513a-1d92-4e85-8f1d-23b55a1cf476",
+    "category": "Infrastructure",
+    "allocated": 1039822.99,
+    "spent": 838718.26,
+    "created_at": "2025-06-28T07:03:09.000Z",
+    "updated_at": "2026-07-01T16:27:32.000Z"
+  },
+  {
+    "id": "ab9ba042-039b-493a-9c19-1b5a6cba02a4",
+    "project_id": "2a47513a-1d92-4e85-8f1d-23b55a1cf476",
+    "category": "Testing",
+    "allocated": 1551081.81,
+    "spent": 456922.02,
+    "created_at": "2025-06-27T02:36:31.000Z",
+    "updated_at": "2025-11-25T03:59:00.000Z"
+  },
+  {
+    "id": "a1553f1a-68f6-4f26-8543-bef10c9e75d6",
+    "project_id": "2a47513a-1d92-4e85-8f1d-23b55a1cf476",
+    "category": "Cloud",
+    "allocated": 83500.0,
+    "spent": 57369.51,
+    "created_at": "2025-06-26T01:55:34.000Z",
+    "updated_at": "2025-10-10T00:59:48.000Z"
+  },
+  {
+    "id": "634c312f-9bb2-488a-9352-edfb0cb7784b",
+    "project_id": "b2eebfde-8515-4cdb-938a-be8beb1b7f02",
+    "category": "Cloud",
+    "allocated": 3800507.51,
+    "spent": 435331.42,
+    "created_at": "2025-11-21T10:31:13.000Z",
+    "updated_at": "2026-08-24T15:42:59.000Z"
+  },
+  {
+    "id": "c455f3d5-deb6-44ef-9d28-a0ba73a105ca",
+    "project_id": "b2eebfde-8515-4cdb-938a-be8beb1b7f02",
+    "category": "Infrastructure",
+    "allocated": 3726316.09,
+    "spent": 415053.45,
+    "created_at": "2025-11-20T05:45:15.000Z",
+    "updated_at": "2026-04-23T21:41:05.000Z"
+  },
+  {
+    "id": "09542533-d8db-49ce-9f25-12527ce823e3",
+    "project_id": "b2eebfde-8515-4cdb-938a-be8beb1b7f02",
+    "category": "Deployment",
+    "allocated": 5789828.21,
+    "spent": 789795.6,
+    "created_at": "2025-11-15T01:08:40.000Z",
+    "updated_at": "2026-02-25T01:46:00.000Z"
+  },
+  {
+    "id": "4a843c82-a29f-412a-bd51-dedd0e24cf65",
+    "project_id": "b2eebfde-8515-4cdb-938a-be8beb1b7f02",
+    "category": "Design",
+    "allocated": 8089318.85,
+    "spent": 758000.47,
+    "created_at": "2025-11-18T11:08:13.000Z",
+    "updated_at": "2025-12-05T05:18:23.000Z"
+  },
+  {
+    "id": "0255d8a9-5a4f-4b6e-a8d2-66e771a3cfdd",
+    "project_id": "b2eebfde-8515-4cdb-938a-be8beb1b7f02",
+    "category": "Testing",
+    "allocated": 2734398.71,
+    "spent": 317921.24,
+    "created_at": "2025-11-15T23:15:47.000Z",
+    "updated_at": "2026-03-04T05:06:14.000Z"
+  },
+  {
+    "id": "f6982c0a-2cb5-4c82-a34c-68b976882071",
+    "project_id": "b2eebfde-8515-4cdb-938a-be8beb1b7f02",
+    "category": "Engineering",
+    "allocated": 83500.0,
+    "spent": 10221.24,
+    "created_at": "2025-11-13T09:49:36.000Z",
+    "updated_at": "2026-01-04T18:50:43.000Z"
+  },
+  {
+    "id": "bacf7ba3-e641-489f-b436-4ea80cd8bc48",
+    "project_id": "a71e611d-dc52-4d5a-bdad-ab35c3412ea2",
+    "category": "Engineering",
+    "allocated": 6862953.51,
+    "spent": 722015.31,
+    "created_at": "2025-10-03T19:13:37.000Z",
+    "updated_at": "2026-03-10T14:04:11.000Z"
+  },
+  {
+    "id": "d5b19b78-bf2d-44aa-9580-7853fbfcb238",
+    "project_id": "a71e611d-dc52-4d5a-bdad-ab35c3412ea2",
+    "category": "Infrastructure",
+    "allocated": 4493244.38,
+    "spent": 452318.66,
+    "created_at": "2025-10-04T06:41:41.000Z",
+    "updated_at": "2026-02-26T04:14:06.000Z"
+  },
+  {
+    "id": "b22acad4-7b0e-4fab-ac73-d45c6ef99ea1",
+    "project_id": "a71e611d-dc52-4d5a-bdad-ab35c3412ea2",
+    "category": "Deployment",
+    "allocated": 2883611.54,
+    "spent": 17563.39,
+    "created_at": "2025-10-01T08:01:56.000Z",
+    "updated_at": "2025-10-28T21:33:31.000Z"
+  },
+  {
+    "id": "d39fb62d-2141-4b97-b512-1301a22a50e9",
+    "project_id": "a71e611d-dc52-4d5a-bdad-ab35c3412ea2",
+    "category": "Design",
+    "allocated": 5421123.94,
+    "spent": 77037.1,
+    "created_at": "2025-09-28T07:15:21.000Z",
+    "updated_at": "2026-03-10T09:55:59.000Z"
+  },
+  {
+    "id": "0a1b77ff-c3b7-4993-8a3d-1859358c125f",
+    "project_id": "a71e611d-dc52-4d5a-bdad-ab35c3412ea2",
+    "category": "Cloud",
+    "allocated": 83500.0,
+    "spent": 105.21,
+    "created_at": "2025-09-28T22:33:52.000Z",
+    "updated_at": "2025-12-20T21:22:37.000Z"
+  },
+  {
+    "id": "9c75a253-964c-44ae-b89d-0445b70b64bb",
+    "project_id": "f721cc98-70ab-45cc-b80a-eca19d1f9123",
+    "category": "Engineering",
+    "allocated": 2799878.58,
+    "spent": 590370.89,
+    "created_at": "2025-10-23T00:00:49.000Z",
+    "updated_at": "2026-09-03T14:47:37.000Z"
+  },
+  {
+    "id": "352d3a46-c0ab-47a3-9924-fad1e76a7bab",
+    "project_id": "f721cc98-70ab-45cc-b80a-eca19d1f9123",
+    "category": "Testing",
+    "allocated": 3116437.1,
+    "spent": 567905.21,
+    "created_at": "2025-10-20T14:58:52.000Z",
+    "updated_at": "2026-04-10T16:17:26.000Z"
+  },
+  {
+    "id": "79b48f36-38f8-42e9-8bab-0a42c854c573",
+    "project_id": "f721cc98-70ab-45cc-b80a-eca19d1f9123",
+    "category": "Deployment",
+    "allocated": 2069550.0,
+    "spent": 480756.26,
+    "created_at": "2025-10-24T18:35:00.000Z",
+    "updated_at": "2026-03-11T05:51:41.000Z"
+  },
+  {
+    "id": "980a07d3-b1e6-4295-96db-f1b322e7a272",
+    "project_id": "f721cc98-70ab-45cc-b80a-eca19d1f9123",
+    "category": "Cloud",
+    "allocated": 8504392.33,
+    "spent": 1034571.68,
+    "created_at": "2025-10-21T09:55:45.000Z",
+    "updated_at": "2026-05-29T06:21:48.000Z"
+  },
+  {
+    "id": "0911da3e-3c02-45b1-890c-b67ecb927560",
+    "project_id": "8bc157b3-1e8f-459b-bf8c-a0cfd5407894",
+    "category": "Design",
+    "allocated": 2441589.27,
+    "spent": 52478.08,
+    "created_at": "2025-12-30T10:14:30.000Z",
+    "updated_at": "2026-08-29T04:59:35.000Z"
+  },
+  {
+    "id": "7f83594f-8975-49eb-bc05-59e171d8ad42",
+    "project_id": "8bc157b3-1e8f-459b-bf8c-a0cfd5407894",
+    "category": "Engineering",
+    "allocated": 2340095.02,
+    "spent": 706195.41,
+    "created_at": "2026-01-01T21:25:54.000Z",
+    "updated_at": "2026-04-30T18:45:30.000Z"
+  },
+  {
+    "id": "e44a0dc5-edc0-4642-96cd-6be77881895f",
+    "project_id": "8bc157b3-1e8f-459b-bf8c-a0cfd5407894",
+    "category": "Testing",
+    "allocated": 1441167.42,
+    "spent": 222889.89,
+    "created_at": "2025-12-30T15:04:54.000Z",
+    "updated_at": "2026-03-14T07:37:54.000Z"
+  },
+  {
+    "id": "5bdda0d5-260e-44f7-8402-b94b0df6e0d4",
+    "project_id": "8bc157b3-1e8f-459b-bf8c-a0cfd5407894",
+    "category": "Infrastructure",
+    "allocated": 4530415.25,
+    "spent": 16396.9,
+    "created_at": "2026-01-06T13:31:34.000Z",
+    "updated_at": "2026-03-22T02:49:42.000Z"
+  },
+  {
+    "id": "c3171aea-4ec5-48ca-88ec-9fc322864458",
+    "project_id": "96d64018-8f42-4811-b766-2d998fbfa6bb",
+    "category": "Testing",
+    "allocated": 5097698.38,
+    "spent": 3060004.46,
+    "created_at": "2025-10-07T10:35:35.000Z",
+    "updated_at": "2025-10-20T01:14:10.000Z"
+  },
+  {
+    "id": "8e86f0ed-afef-4f09-a6ff-5ebf5bf0af53",
+    "project_id": "96d64018-8f42-4811-b766-2d998fbfa6bb",
+    "category": "Design",
+    "allocated": 9638754.87,
+    "spent": 6199242.07,
+    "created_at": "2025-10-08T04:00:26.000Z",
+    "updated_at": "2026-04-10T05:02:41.000Z"
+  },
+  {
+    "id": "06d9bef3-faa0-4499-a94f-d7d38205a43d",
+    "project_id": "96d64018-8f42-4811-b766-2d998fbfa6bb",
+    "category": "Engineering",
+    "allocated": 13113872.06,
+    "spent": 3041122.6,
+    "created_at": "2025-10-08T04:12:00.000Z",
+    "updated_at": "2026-01-11T09:23:38.000Z"
+  },
+  {
+    "id": "59c1122a-4b84-45f1-9473-8b0793aebdbd",
+    "project_id": "96d64018-8f42-4811-b766-2d998fbfa6bb",
+    "category": "Infrastructure",
+    "allocated": 10935338.69,
+    "spent": 7706394.52,
+    "created_at": "2025-10-12T02:19:33.000Z",
+    "updated_at": "2026-03-31T16:46:18.000Z"
+  },
+  {
+    "id": "35aa008a-fe76-49e0-a454-c88ce23933ee",
+    "project_id": "96d64018-8f42-4811-b766-2d998fbfa6bb",
+    "category": "Cloud",
+    "allocated": 83500.0,
+    "spent": 39558.12,
+    "created_at": "2025-10-09T22:14:55.000Z",
+    "updated_at": "2026-04-07T03:33:57.000Z"
+  },
+  {
+    "id": "351ffe41-1421-46da-ad99-fe35d6a9a0b3",
+    "project_id": "2aab28e4-4227-4182-80c1-091888c17f43",
+    "category": "Deployment",
+    "allocated": 4713306.13,
+    "spent": 1598948.18,
+    "created_at": "2025-09-23T19:28:54.000Z",
+    "updated_at": "2026-05-24T17:09:44.000Z"
+  },
+  {
+    "id": "301652ee-c7af-4cc6-bc5c-7954fdd5eff5",
+    "project_id": "2aab28e4-4227-4182-80c1-091888c17f43",
+    "category": "Testing",
+    "allocated": 6645659.79,
+    "spent": 5180588.0,
+    "created_at": "2025-09-23T23:20:32.000Z",
+    "updated_at": "2026-07-29T22:23:58.000Z"
+  },
+  {
+    "id": "ae79952d-3d3a-4cd9-a016-259a03335279",
+    "project_id": "2aab28e4-4227-4182-80c1-091888c17f43",
+    "category": "Infrastructure",
+    "allocated": 6491799.35,
+    "spent": 2783059.18,
+    "created_at": "2025-09-26T06:22:17.000Z",
+    "updated_at": "2026-08-26T19:02:19.000Z"
+  },
+  {
+    "id": "fd831b9b-030e-48d9-8ae8-c3ab814402e7",
+    "project_id": "2aab28e4-4227-4182-80c1-091888c17f43",
+    "category": "Cloud",
+    "allocated": 11378904.05,
+    "spent": 8446988.59,
+    "created_at": "2025-09-24T13:30:15.000Z",
+    "updated_at": "2026-05-20T14:23:54.000Z"
+  },
+  {
+    "id": "04585fa3-45bb-4aef-9957-d7438880cbd1",
+    "project_id": "7fb5eb6f-4d51-442c-a5cd-912ebcbccd1b",
+    "category": "Infrastructure",
+    "allocated": 11161348.97,
+    "spent": 4615589.42,
+    "created_at": "2025-12-23T06:00:26.000Z",
+    "updated_at": "2026-04-19T19:22:41.000Z"
+  },
+  {
+    "id": "e0078797-66ad-4ae4-aa52-5e7d6c2b7d23",
+    "project_id": "7fb5eb6f-4d51-442c-a5cd-912ebcbccd1b",
+    "category": "Deployment",
+    "allocated": 12456624.36,
+    "spent": 8520615.55,
+    "created_at": "2025-12-21T14:24:29.000Z",
+    "updated_at": "2026-03-16T16:03:41.000Z"
+  },
+  {
+    "id": "fcb3a7bf-a62b-4ec1-9008-45fbc30ba13d",
+    "project_id": "7fb5eb6f-4d51-442c-a5cd-912ebcbccd1b",
+    "category": "Engineering",
+    "allocated": 6524609.84,
+    "spent": 556038.19,
+    "created_at": "2025-12-30T20:58:28.000Z",
+    "updated_at": "2026-07-05T22:00:54.000Z"
+  },
+  {
+    "id": "554c6eda-5957-4f24-9794-097206af050f",
+    "project_id": "7fb5eb6f-4d51-442c-a5cd-912ebcbccd1b",
+    "category": "Cloud",
+    "allocated": 9170424.24,
+    "spent": 6945145.07,
+    "created_at": "2025-12-23T19:59:32.000Z",
+    "updated_at": "2026-05-02T20:07:22.000Z"
+  },
+  {
+    "id": "376cce12-64a9-4a3a-9d9e-e67c5b7a6520",
+    "project_id": "7fb5eb6f-4d51-442c-a5cd-912ebcbccd1b",
+    "category": "Design",
+    "allocated": 83500.0,
+    "spent": 44523.04,
+    "created_at": "2025-12-29T22:57:42.000Z",
+    "updated_at": "2026-09-05T12:22:51.000Z"
+  },
+  {
+    "id": "e09b922a-b278-4288-a592-6de5c1c6bb06",
+    "project_id": "4e2874fd-cbe5-4f64-b967-00d56f7b6f92",
+    "category": "Testing",
+    "allocated": 2804733.27,
+    "spent": 2804733.27,
+    "created_at": "2025-07-31T01:58:58.000Z",
+    "updated_at": "2025-09-02T20:32:54.000Z"
+  },
+  {
+    "id": "06ffadf1-c46c-4d2d-8551-f334be015f6c",
+    "project_id": "4e2874fd-cbe5-4f64-b967-00d56f7b6f92",
+    "category": "Cloud",
+    "allocated": 2773404.07,
+    "spent": 1078174.54,
+    "created_at": "2025-08-04T22:38:41.000Z",
+    "updated_at": "2025-10-11T21:31:49.000Z"
+  },
+  {
+    "id": "dbe02ebc-ab9e-4c43-8174-8c5e5dab6715",
+    "project_id": "4e2874fd-cbe5-4f64-b967-00d56f7b6f92",
+    "category": "Infrastructure",
+    "allocated": 2708365.92,
+    "spent": 2472620.37,
+    "created_at": "2025-08-04T05:57:05.000Z",
+    "updated_at": "2026-01-03T13:06:20.000Z"
+  },
+  {
+    "id": "b26151e2-5f25-4e46-a090-b5b05921da46",
+    "project_id": "4e2874fd-cbe5-4f64-b967-00d56f7b6f92",
+    "category": "Deployment",
+    "allocated": 877593.35,
+    "spent": 139991.09,
+    "created_at": "2025-08-03T20:29:41.000Z",
+    "updated_at": "2026-04-13T04:49:55.000Z"
+  },
+  {
+    "id": "bf531c29-cf22-4dc0-9db5-fceaf606b43f",
+    "project_id": "be0fee93-1971-457f-8ff1-8c1270ded4fe",
+    "category": "Design",
+    "allocated": 4283074.88,
+    "spent": 1632070.96,
+    "created_at": "2026-02-27T01:45:55.000Z",
+    "updated_at": "2026-07-17T01:29:56.000Z"
+  },
+  {
+    "id": "a7f7d7fc-2603-482b-ac44-6311ca2a4131",
+    "project_id": "be0fee93-1971-457f-8ff1-8c1270ded4fe",
+    "category": "Infrastructure",
+    "allocated": 3567942.48,
+    "spent": 2199158.71,
+    "created_at": "2026-02-27T15:39:10.000Z",
+    "updated_at": "2026-05-17T05:09:08.000Z"
+  },
+  {
+    "id": "b2ed9c0e-8148-44f9-a4e2-31f2395a7940",
+    "project_id": "be0fee93-1971-457f-8ff1-8c1270ded4fe",
+    "category": "Engineering",
+    "allocated": 2953333.21,
+    "spent": 40424.86,
+    "created_at": "2026-03-04T07:02:39.000Z",
+    "updated_at": "2026-04-25T10:31:14.000Z"
+  },
+  {
+    "id": "13495ca8-5e11-47e2-bc6f-7392b14fda95",
+    "project_id": "be0fee93-1971-457f-8ff1-8c1270ded4fe",
+    "category": "Cloud",
+    "allocated": 2391822.43,
+    "spent": 1420903.64,
+    "created_at": "2026-02-24T23:46:38.000Z",
+    "updated_at": "2026-09-02T08:36:00.000Z"
+  },
+  {
+    "id": "477d2d79-03af-4849-a1a4-ea7669d1ea5a",
+    "project_id": "d6c43d54-ad26-4b34-8732-60c790fe5eda",
+    "category": "Infrastructure",
+    "allocated": 1061709.18,
+    "spent": 300190.02,
+    "created_at": "2025-06-23T11:56:29.000Z",
+    "updated_at": "2026-07-31T15:44:16.000Z"
+  },
+  {
+    "id": "b81e4d8a-1a97-4a15-974c-a9f3930f50ae",
+    "project_id": "d6c43d54-ad26-4b34-8732-60c790fe5eda",
+    "category": "Cloud",
+    "allocated": 1127825.31,
+    "spent": 415298.94,
+    "created_at": "2025-06-24T06:50:59.000Z",
+    "updated_at": "2026-03-18T15:29:14.000Z"
+  },
+  {
+    "id": "8925e389-baa5-4bc5-ad10-32c3f00d6feb",
+    "project_id": "d6c43d54-ad26-4b34-8732-60c790fe5eda",
+    "category": "Deployment",
+    "allocated": 1144159.58,
+    "spent": 648315.71,
+    "created_at": "2025-06-24T18:43:04.000Z",
+    "updated_at": "2026-05-19T20:40:14.000Z"
+  },
+  {
+    "id": "3c019861-eca5-49c8-92d2-201783fe1791",
+    "project_id": "d6c43d54-ad26-4b34-8732-60c790fe5eda",
+    "category": "Engineering",
+    "allocated": 577379.95,
+    "spent": 286265.55,
+    "created_at": "2025-06-29T21:03:42.000Z",
+    "updated_at": "2025-07-09T14:27:46.000Z"
+  },
+  {
+    "id": "d79d5fb2-e8eb-4f32-bb45-eaa3dbe71683",
+    "project_id": "d6c43d54-ad26-4b34-8732-60c790fe5eda",
+    "category": "Testing",
+    "allocated": 1262973.41,
+    "spent": 383171.48,
+    "created_at": "2025-06-28T18:33:07.000Z",
+    "updated_at": "2026-07-23T04:29:03.000Z"
+  },
+  {
+    "id": "85a5332b-913c-446b-a1c4-9e1e10ff1d16",
+    "project_id": "d6c43d54-ad26-4b34-8732-60c790fe5eda",
+    "category": "Design",
+    "allocated": 563495.57,
+    "spent": 346984.25,
+    "created_at": "2025-07-01T11:47:49.000Z",
+    "updated_at": "2026-03-21T09:25:18.000Z"
+  },
+  {
+    "id": "d9abf674-9b17-4b3a-8b29-a9940c9f472b",
+    "project_id": "6d07eed1-130c-497e-8db9-04f2f49f0ef1",
+    "category": "Cloud",
+    "allocated": 6427008.36,
+    "spent": 597303.89,
+    "created_at": "2025-09-21T03:15:16.000Z",
+    "updated_at": "2026-07-06T10:26:57.000Z"
+  },
+  {
+    "id": "f9e5085a-5624-4322-915a-4f15efa3b3e3",
+    "project_id": "6d07eed1-130c-497e-8db9-04f2f49f0ef1",
+    "category": "Testing",
+    "allocated": 3879596.21,
+    "spent": 214389.59,
+    "created_at": "2025-09-18T14:26:30.000Z",
+    "updated_at": "2026-05-29T03:49:20.000Z"
+  },
+  {
+    "id": "ee49e9ec-7b04-4bb9-a876-8609d8feee1f",
+    "project_id": "6d07eed1-130c-497e-8db9-04f2f49f0ef1",
+    "category": "Engineering",
+    "allocated": 5840850.88,
+    "spent": 1103873.34,
+    "created_at": "2025-09-18T05:22:38.000Z",
+    "updated_at": "2025-12-04T00:20:18.000Z"
+  },
+  {
+    "id": "4c4c45de-8368-45ae-93e6-c2a512eb25de",
+    "project_id": "6d07eed1-130c-497e-8db9-04f2f49f0ef1",
+    "category": "Infrastructure",
+    "allocated": 7807801.93,
+    "spent": 553135.73,
+    "created_at": "2025-09-20T16:59:19.000Z",
+    "updated_at": "2025-10-03T18:03:08.000Z"
+  },
+  {
+    "id": "23f37e12-0186-4514-b71f-239dfc550424",
+    "project_id": "6d07eed1-130c-497e-8db9-04f2f49f0ef1",
+    "category": "Design",
+    "allocated": 83500.0,
+    "spent": 7321.28,
+    "created_at": "2025-09-14T22:50:24.000Z",
+    "updated_at": "2026-07-06T19:15:22.000Z"
+  },
+  {
+    "id": "c2e22f54-b569-4fdd-84b1-93e46ebc9f46",
+    "project_id": "2413ea95-61e1-4025-9d82-44b3428d0fb1",
+    "category": "Deployment",
+    "allocated": 4921545.11,
+    "spent": 1688491.91,
+    "created_at": "2026-01-19T20:08:02.000Z",
+    "updated_at": "2026-07-18T19:53:50.000Z"
+  },
+  {
+    "id": "7f1d5ee4-d169-48e6-ae95-bf32e75a085a",
+    "project_id": "2413ea95-61e1-4025-9d82-44b3428d0fb1",
+    "category": "Cloud",
+    "allocated": 3726680.99,
+    "spent": 1589277.21,
+    "created_at": "2026-01-23T07:53:07.000Z",
+    "updated_at": "2026-08-24T15:57:51.000Z"
+  },
+  {
+    "id": "aa31c217-1871-4240-9149-426aae916cfc",
+    "project_id": "2413ea95-61e1-4025-9d82-44b3428d0fb1",
+    "category": "Engineering",
+    "allocated": 2625500.52,
+    "spent": 836513.85,
+    "created_at": "2026-01-16T08:48:40.000Z",
+    "updated_at": "2026-08-25T21:13:49.000Z"
+  },
+  {
+    "id": "85ce2bc7-65bf-4217-bc51-64dc56a0cb74",
+    "project_id": "2413ea95-61e1-4025-9d82-44b3428d0fb1",
+    "category": "Design",
+    "allocated": 2628939.05,
+    "spent": 652129.99,
+    "created_at": "2026-01-16T16:36:51.000Z",
+    "updated_at": "2026-04-02T08:42:04.000Z"
+  },
+  {
+    "id": "64c622e7-a2a5-480a-8494-23d8c2cb5a3c",
+    "project_id": "2413ea95-61e1-4025-9d82-44b3428d0fb1",
+    "category": "Testing",
+    "allocated": 1921841.84,
+    "spent": 821039.64,
+    "created_at": "2026-01-15T19:43:34.000Z",
+    "updated_at": "2026-04-29T18:20:59.000Z"
+  },
+  {
+    "id": "7fd9bc61-94fe-42e6-b658-3b1195c568a4",
+    "project_id": "2413ea95-61e1-4025-9d82-44b3428d0fb1",
+    "category": "Infrastructure",
+    "allocated": 83500.0,
+    "spent": 21485.38,
+    "created_at": "2026-01-23T19:45:23.000Z",
+    "updated_at": "2026-01-26T09:52:21.000Z"
+  },
+  {
+    "id": "8d8e7b2c-1f93-427f-af29-d9502f06af44",
+    "project_id": "649334dd-b120-4d90-beb7-48b59802d557",
+    "category": "Infrastructure",
+    "allocated": 7007506.21,
+    "spent": 562758.27,
+    "created_at": "2025-05-21T01:49:36.000Z",
+    "updated_at": "2026-03-20T03:04:03.000Z"
+  },
+  {
+    "id": "778ac1eb-c4b5-4cb1-8957-619b881a91c7",
+    "project_id": "649334dd-b120-4d90-beb7-48b59802d557",
+    "category": "Design",
+    "allocated": 2307728.75,
+    "spent": 349281.34,
+    "created_at": "2025-05-15T01:51:17.000Z",
+    "updated_at": "2026-06-05T01:36:07.000Z"
+  },
+  {
+    "id": "1985ad34-b2fa-431a-82e8-d7346a0bbb65",
+    "project_id": "649334dd-b120-4d90-beb7-48b59802d557",
+    "category": "Deployment",
+    "allocated": 7142951.55,
+    "spent": 1433215.71,
+    "created_at": "2025-05-16T01:33:25.000Z",
+    "updated_at": "2025-09-14T16:59:05.000Z"
+  },
+  {
+    "id": "9faf7ce9-1c6c-48c4-9408-087f2e746d16",
+    "project_id": "649334dd-b120-4d90-beb7-48b59802d557",
+    "category": "Cloud",
+    "allocated": 6375821.19,
+    "spent": 1529523.78,
+    "created_at": "2025-05-20T09:34:36.000Z",
+    "updated_at": "2026-04-20T19:53:52.000Z"
+  },
+  {
+    "id": "1603ca67-f8e1-4976-800b-7caaf212b8e7",
+    "project_id": "8c7d4bf3-1aa6-4475-9a79-6945079bfe08",
+    "category": "Testing",
+    "allocated": 6726000.99,
+    "spent": 390785.01,
+    "created_at": "2025-08-24T22:42:32.000Z",
+    "updated_at": "2025-10-13T23:56:12.000Z"
+  },
+  {
+    "id": "b4781848-df3c-4e52-b881-0acf31829e72",
+    "project_id": "8c7d4bf3-1aa6-4475-9a79-6945079bfe08",
+    "category": "Deployment",
+    "allocated": 4872386.99,
+    "spent": 380388.42,
+    "created_at": "2025-08-23T02:22:39.000Z",
+    "updated_at": "2026-06-11T01:38:03.000Z"
+  },
+  {
+    "id": "a0d5b789-4638-4a92-bf96-c7c0c0223862",
+    "project_id": "8c7d4bf3-1aa6-4475-9a79-6945079bfe08",
+    "category": "Infrastructure",
+    "allocated": 5071503.59,
+    "spent": 318494.05,
+    "created_at": "2025-08-27T07:45:51.000Z",
+    "updated_at": "2026-04-08T13:53:14.000Z"
+  },
+  {
+    "id": "89f6b97e-19f9-431d-9dc2-13811163813b",
+    "project_id": "8c7d4bf3-1aa6-4475-9a79-6945079bfe08",
+    "category": "Design",
+    "allocated": 7398201.04,
+    "spent": 493794.78,
+    "created_at": "2025-08-30T07:55:16.000Z",
+    "updated_at": "2025-11-14T20:59:51.000Z"
+  },
+  {
+    "id": "20c02d3f-3154-4c08-bc3e-54cc37a0e409",
+    "project_id": "5ebf71fc-1cc1-4d0e-888e-cbf38d246585",
+    "category": "Design",
+    "allocated": 2497501.7,
+    "spent": 759812.42,
+    "created_at": "2026-01-19T08:54:54.000Z",
+    "updated_at": "2026-08-12T14:58:53.000Z"
+  },
+  {
+    "id": "14740e09-775e-4a06-8c2f-33611a22ea6d",
+    "project_id": "5ebf71fc-1cc1-4d0e-888e-cbf38d246585",
+    "category": "Cloud",
+    "allocated": 1901153.89,
+    "spent": 109340.74,
+    "created_at": "2026-01-23T11:32:03.000Z",
+    "updated_at": "2026-06-20T02:18:42.000Z"
+  },
+  {
+    "id": "c0a705ef-e52d-46d0-b9d2-8417cb0205bf",
+    "project_id": "5ebf71fc-1cc1-4d0e-888e-cbf38d246585",
+    "category": "Testing",
+    "allocated": 985993.89,
+    "spent": 42086.5,
+    "created_at": "2026-01-20T12:39:01.000Z",
+    "updated_at": "2026-06-26T03:01:44.000Z"
+  },
+  {
+    "id": "70bf97df-e509-411e-b97a-e0be0d679e24",
+    "project_id": "5ebf71fc-1cc1-4d0e-888e-cbf38d246585",
+    "category": "Deployment",
+    "allocated": 2291301.79,
+    "spent": 253191.2,
+    "created_at": "2026-01-20T12:34:35.000Z",
+    "updated_at": "2026-02-01T04:58:03.000Z"
+  },
+  {
+    "id": "8778486b-b705-4724-a90a-9344d0b4b974",
+    "project_id": "5ebf71fc-1cc1-4d0e-888e-cbf38d246585",
+    "category": "Engineering",
+    "allocated": 1761505.15,
+    "spent": 667952.41,
+    "created_at": "2026-01-22T19:09:37.000Z",
+    "updated_at": "2026-05-12T09:17:11.000Z"
+  },
+  {
+    "id": "36d79adc-6a28-4b6c-9593-3bacae7672c9",
+    "project_id": "1eb04097-090d-4b70-9eb0-67e0f918013b",
+    "category": "Testing",
+    "allocated": 4715797.77,
+    "spent": 435491.74,
+    "created_at": "2025-07-22T08:00:11.000Z",
+    "updated_at": "2026-08-06T17:50:49.000Z"
+  },
+  {
+    "id": "f648f8c1-1165-4811-8272-fe9698bf7480",
+    "project_id": "1eb04097-090d-4b70-9eb0-67e0f918013b",
+    "category": "Cloud",
+    "allocated": 4877326.85,
+    "spent": 312501.26,
+    "created_at": "2025-07-13T18:16:23.000Z",
+    "updated_at": "2025-11-30T11:36:16.000Z"
+  },
+  {
+    "id": "4ddb3e64-02d2-4fd3-bd5a-db6a924bdcc8",
+    "project_id": "1eb04097-090d-4b70-9eb0-67e0f918013b",
+    "category": "Infrastructure",
+    "allocated": 4106223.56,
+    "spent": 487782.78,
+    "created_at": "2025-07-19T20:47:25.000Z",
+    "updated_at": "2026-05-27T17:30:51.000Z"
+  },
+  {
+    "id": "f9166267-64cf-4559-b59c-d0a6dd2dfd50",
+    "project_id": "1eb04097-090d-4b70-9eb0-67e0f918013b",
+    "category": "Engineering",
+    "allocated": 5250392.33,
+    "spent": 1057422.29,
+    "created_at": "2025-07-14T13:57:31.000Z",
+    "updated_at": "2025-11-22T01:36:01.000Z"
+  },
+  {
+    "id": "9fca9f38-4c58-49ce-ae63-e321daada496",
+    "project_id": "421a0fdf-481a-4160-9aec-f7fd5f01b901",
+    "category": "Engineering",
+    "allocated": 3681029.87,
+    "spent": 20809.87,
+    "created_at": "2025-04-19T19:19:47.000Z",
+    "updated_at": "2025-10-21T16:57:06.000Z"
+  },
+  {
+    "id": "7cc3ddf7-fc02-47c2-a292-4360f27155ea",
+    "project_id": "421a0fdf-481a-4160-9aec-f7fd5f01b901",
+    "category": "Infrastructure",
+    "allocated": 5616113.14,
+    "spent": 598661.6,
+    "created_at": "2025-04-17T16:55:08.000Z",
+    "updated_at": "2026-05-30T22:59:19.000Z"
+  },
+  {
+    "id": "6f5d422b-6e8f-47eb-801d-0e4d69f5b7a9",
+    "project_id": "421a0fdf-481a-4160-9aec-f7fd5f01b901",
+    "category": "Cloud",
+    "allocated": 10066922.82,
+    "spent": 535774.41,
+    "created_at": "2025-04-22T16:40:53.000Z",
+    "updated_at": "2025-05-19T00:07:51.000Z"
+  },
+  {
+    "id": "5f815e2b-d402-4736-9bd3-cf679e2b5817",
+    "project_id": "421a0fdf-481a-4160-9aec-f7fd5f01b901",
+    "category": "Deployment",
+    "allocated": 4097122.06,
+    "spent": 731846.6,
+    "created_at": "2025-04-20T21:31:05.000Z",
+    "updated_at": "2026-03-27T13:20:55.000Z"
+  },
+  {
+    "id": "6347e9bc-4285-428a-8d71-a3d681c12fde",
+    "project_id": "421a0fdf-481a-4160-9aec-f7fd5f01b901",
+    "category": "Testing",
+    "allocated": 6234263.64,
+    "spent": 1176950.87,
+    "created_at": "2025-04-16T15:37:34.000Z",
+    "updated_at": "2025-05-22T21:13:32.000Z"
+  },
+  {
+    "id": "d7949ac7-742b-438f-b516-7dd7242ee922",
+    "project_id": "1db2247f-ef50-41c3-99cb-1588f9940282",
+    "category": "Deployment",
+    "allocated": 3709130.96,
+    "spent": 275073.22,
+    "created_at": "2025-12-18T12:45:30.000Z",
+    "updated_at": "2026-06-01T21:20:08.000Z"
+  },
+  {
+    "id": "f4a0ee4c-038a-40fe-8f77-e0608b27f1d3",
+    "project_id": "1db2247f-ef50-41c3-99cb-1588f9940282",
+    "category": "Engineering",
+    "allocated": 2659704.62,
+    "spent": 39128.93,
+    "created_at": "2025-12-15T02:24:42.000Z",
+    "updated_at": "2026-09-01T08:34:46.000Z"
+  },
+  {
+    "id": "324a9948-132b-4d1a-892f-039265de8dcb",
+    "project_id": "1db2247f-ef50-41c3-99cb-1588f9940282",
+    "category": "Infrastructure",
+    "allocated": 2763581.13,
+    "spent": 80502.35,
+    "created_at": "2025-12-17T03:53:13.000Z",
+    "updated_at": "2026-01-07T03:48:17.000Z"
+  },
+  {
+    "id": "51f75866-ce71-49bc-9604-5b83171830f9",
+    "project_id": "1db2247f-ef50-41c3-99cb-1588f9940282",
+    "category": "Cloud",
+    "allocated": 1671909.65,
+    "spent": 62762.78,
+    "created_at": "2025-12-12T21:36:55.000Z",
+    "updated_at": "2026-04-08T16:23:03.000Z"
+  },
+  {
+    "id": "7004dbd7-8e29-44ac-82b4-ae022f27cb75",
+    "project_id": "1db2247f-ef50-41c3-99cb-1588f9940282",
+    "category": "Testing",
+    "allocated": 83500.0,
+    "spent": 8605.51,
+    "created_at": "2025-12-17T01:00:16.000Z",
+    "updated_at": "2026-01-04T03:00:00.000Z"
+  },
+  {
+    "id": "77bb3cb2-cfab-4547-9972-1be5733c05b3",
+    "project_id": "1db2247f-ef50-41c3-99cb-1588f9940282",
+    "category": "Design",
+    "allocated": 83500.0,
+    "spent": 6677.49,
+    "created_at": "2025-12-20T04:13:32.000Z",
+    "updated_at": "2026-08-10T14:16:16.000Z"
+  },
+  {
+    "id": "a4c8b95d-e1db-461d-8b54-95dc7f6a337e",
+    "project_id": "76d8c6fd-629e-4272-bde6-63ecaca43d69",
+    "category": "Cloud",
+    "allocated": 1464613.38,
+    "spent": 231608.96,
+    "created_at": "2025-10-31T21:21:38.000Z",
+    "updated_at": "2026-01-20T12:00:02.000Z"
+  },
+  {
+    "id": "7820dd18-916e-4f22-9cf7-b1a159293cb2",
+    "project_id": "76d8c6fd-629e-4272-bde6-63ecaca43d69",
+    "category": "Design",
+    "allocated": 2519709.36,
+    "spent": 691119.48,
+    "created_at": "2025-10-29T08:09:16.000Z",
+    "updated_at": "2026-03-01T09:01:37.000Z"
+  },
+  {
+    "id": "f3df6895-c058-4fbd-9b96-c4fc53944371",
+    "project_id": "76d8c6fd-629e-4272-bde6-63ecaca43d69",
+    "category": "Deployment",
+    "allocated": 2965100.87,
+    "spent": 791431.37,
+    "created_at": "2025-10-28T12:17:57.000Z",
+    "updated_at": "2026-03-22T13:58:15.000Z"
+  },
+  {
+    "id": "7acc9c41-b861-42be-b03b-153043ee796c",
+    "project_id": "76d8c6fd-629e-4272-bde6-63ecaca43d69",
+    "category": "Infrastructure",
+    "allocated": 1846822.1,
+    "spent": 83838.18,
+    "created_at": "2025-11-02T07:52:01.000Z",
+    "updated_at": "2026-07-19T06:57:24.000Z"
+  },
+  {
+    "id": "8ca2c703-99d3-4609-a49c-3c70c8d2dadc",
+    "project_id": "76d8c6fd-629e-4272-bde6-63ecaca43d69",
+    "category": "Testing",
+    "allocated": 1753959.25,
+    "spent": 1669944.89,
+    "created_at": "2025-11-02T00:45:28.000Z",
+    "updated_at": "2025-11-11T19:12:26.000Z"
+  }
+]
