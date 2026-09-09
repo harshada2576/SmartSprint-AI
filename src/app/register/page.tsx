@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { getAuthErrorMessage } from "@/lib/auth/auth-errors";
-import { ensureUserProvisioned } from "@/lib/auth/organization";
+import { requestProvisioning } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/client";
 import {
   Briefcase,
@@ -88,14 +88,15 @@ export default function RegisterPage() {
         return;
       }
 
-      // Email confirmation OFF: we have a session immediately, so provision
-      // the application profile + organization now.
+      // Email confirmation OFF: we have a session immediately, so request
+      // trusted server-side provisioning. The browser never writes the
+      // organization / ADMIN membership directly; POST /auth/provision
+      // derives identity from the session server-side.
       if (data.session && data.user) {
         try {
-          await ensureUserProvisioned(
-            supabase,
-            data.user,
-            { firstName, lastName, organizationName }
+          await requestProvisioning(
+            { firstName, lastName, organizationName },
+            { accessToken: data.session.access_token }
           );
         } catch (provisionError) {
           const message =

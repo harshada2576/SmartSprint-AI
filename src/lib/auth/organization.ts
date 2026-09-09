@@ -1,27 +1,17 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
-import type { User } from "@supabase/supabase-js";
-
 /**
- * Application provisioning: auth.users -> public.users -> organizations
- * -> organization_members.
+ * Client-safe auth helpers: pure derivation + trusted-provisioning request.
  *
- * SECURITY RULES (enforced here, not by caller input):
- * - The organization-creator role is hardcoded to ADMIN. Callers can never
- *   pass a role; there is no role parameter on any function in this module.
- * - public.users.id is always the Supabase Auth user id. Passwords are never
- *   handled here (Supabase Auth owns credentials; nothing is stored in
- *   public.users).
- * - Existing application rows (e.g. seeded users) are never overwritten or
- *   re-owned: if the email already belongs to a different profile id, we
- *   fail closed instead of merging.
+ * SECURITY BOUNDARY:
+ * - This module is importable by browser components. It must NEVER perform
+ *   privileged database writes (organizations / organization_members) and
+ *   must NEVER import the service-role key or server-only helpers.
+ * - The actual provisioning (public.users -> organizations ->
+ *   organization_members with hardcoded ADMIN) happens server-side in
+ *   `src/lib/auth/provision-server.ts` via `POST /auth/provision` or
+ *   `GET /auth/callback`. This module only *requests* that trusted path.
+ * - The organization-creator role (ADMIN) is hardcoded server-side. There is
+ *   intentionally no role parameter anywhere in this module.
  */
-
-// Only these roles exist in the application. New organization creators
-// always receive ADMIN (they own the organization they just created).
-// Plain invite-based signups default to DEVELOPER via the DB default.
-const ORG_CREATOR_ROLE = "ADMIN" as const;
-
-const MAX_SLUG_ATTEMPTS = 10;
 
 export function slugifyOrganizationName(name: string): string {
   const base = name
@@ -32,10 +22,6 @@ export function slugifyOrganizationName(name: string): string {
     .slice(0, 60)
     .replace(/-+$/g, "");
   return base || "workspace";
-}
-
-function initials(firstName: string, lastName: string): string {
-  return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "U";
 }
 
 function splitFullName(fullName: string | undefined, fallbackEmail: string) {
@@ -93,138 +79,84 @@ export function organizationNameFromMetadata(
   return `${firstName}'s Workspace`;
 }
 
-async function findUniqueSlug(
-  supabase: SupabaseClient,
-  base: string
-): Promise<string> {
-  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt += 1) {
-    const candidate = attempt === 0 ? base : `${base}-${attempt}`;
-    const { data, error } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("slug", candidate)
-      .maybeSingle();
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      return candidate;
-    }
-  }
-  // Extremely unlikely: fall back to a random suffix to guarantee uniqueness.
-  const suffix = Math.random().toString(36).slice(2, 8);
-  return `${base}-${suffix}`;
+export interface ProvisionRequestOverrides {
+  firstName?: string;
+  lastName?: string;
+  organizationName?: string;
 }
 
-export interface ProvisionResult {
+export interface ProvisionSuccess {
   organizationId: string;
   createdOrganization: boolean;
 }
 
 /**
- * Ensures the application profile + organization membership exist for an
- * authenticated user. Safe to call on every sign-in (idempotent):
- * - Creates public.users if missing (id = auth user id).
- * - Creates an organization + ADMIN membership only if the user has no
- *   organization membership yet.
- * - Never changes roles of existing memberships and never reassigns rows
- *   belonging to another profile id.
+ * Client-safe provisioning request. Calls the trusted server lane
+ * (`POST /auth/provision`), which derives the authenticated user from the
+ * Supabase session/token server-side and performs the privileged writes
+ * with the service-role key (never exposed to the browser).
+ *
+ * Never sends user ids, roles, or membership claims: the server ignores any
+ * such fields and uses only the verified Auth identity plus the display
+ * fields below. Throws `Error(code)` where code is one of the safe,
+ * machine-readable strings: `account_exists`, `oauth_no_email`,
+ * `session_expired`, `provisioning_failed`.
  */
-export async function ensureUserProvisioned(
-  supabase: SupabaseClient,
-  authUser: User,
-  overrides?: { firstName?: string; lastName?: string; organizationName?: string }
-): Promise<ProvisionResult> {
-  const email = authUser.email;
-  if (!email) {
-    throw new Error("oauth_no_email");
+export async function requestProvisioning(
+  overrides?: ProvisionRequestOverrides,
+  opts?: { accessToken?: string }
+): Promise<ProvisionSuccess> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (opts?.accessToken) {
+    headers.Authorization = `Bearer ${opts.accessToken}`;
   }
 
-  const metadata = (authUser.user_metadata ?? {}) as Record<string, unknown>;
-  const derived = namesFromMetadata(metadata, email);
-  const firstName = (overrides?.firstName ?? derived.firstName).trim() || "User";
-  const lastName = (overrides?.lastName ?? derived.lastName).trim();
-  const organizationName = (
-    overrides?.organizationName ?? organizationNameFromMetadata(metadata, email)
-  ).trim();
-
-  if (!organizationName) {
-    throw new Error("Organization name is required.");
+  let response: Response;
+  try {
+    response = await fetch("/auth/provision", {
+      method: "POST",
+      headers,
+      credentials: "same-origin",
+      body: JSON.stringify({
+        firstName: overrides?.firstName,
+        lastName: overrides?.lastName,
+        organizationName: overrides?.organizationName,
+      }),
+    });
+  } catch {
+    throw new Error("provisioning_failed");
   }
 
-  // 1. Fail closed if this email already belongs to a different profile
-  //    (e.g. a seeded user not linked to this auth identity).
-  const { data: existingByEmail, error: emailLookupError } = await supabase
-    .from("users")
-    .select("id")
-    .eq("email", email)
-    .maybeSingle();
-  if (emailLookupError) {
-    throw emailLookupError;
-  }
-  if (existingByEmail && existingByEmail.id !== authUser.id) {
-    throw new Error("account_exists");
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error("provisioning_failed");
   }
 
-  // 2. Upsert the application profile keyed by the auth user id.
-  const { error: profileError } = await supabase.from("users").upsert(
-    {
-      id: authUser.id,
-      first_name: firstName,
-      last_name: lastName,
-      email,
-      avatar_initials: initials(firstName, lastName),
-      status: "active",
-    },
-    { onConflict: "id" }
-  );
-  if (profileError) {
-    throw profileError;
-  }
+  const body = (payload ?? {}) as {
+    ok?: boolean;
+    code?: string;
+    organizationId?: string;
+    createdOrganization?: boolean;
+  };
 
-  // 3. If the user already belongs to an organization, provisioning is done.
-  const { data: memberships, error: membershipError } = await supabase
-    .from("organization_members")
-    .select("organization_id")
-    .eq("user_id", authUser.id)
-    .limit(1);
-  if (membershipError) {
-    throw membershipError;
-  }
-  if (memberships && memberships.length > 0) {
+  if (response.ok && body.ok && typeof body.organizationId === "string") {
     return {
-      organizationId: memberships[0].organization_id as string,
-      createdOrganization: false,
+      organizationId: body.organizationId,
+      createdOrganization: body.createdOrganization === true,
     };
   }
 
-  // 4. Create the organization with a collision-safe slug.
-  const slug = await findUniqueSlug(
-    supabase,
-    slugifyOrganizationName(organizationName)
-  );
-  const { data: organization, error: orgError } = await supabase
-    .from("organizations")
-    .insert({ name: organizationName, slug })
-    .select("id")
-    .single();
-  if (orgError || !organization) {
-    throw orgError ?? new Error("Failed to create organization.");
-  }
-
-  // 5. Grant the creator ADMIN on their own organization (hardcoded role).
-  const { error: memberError } = await supabase
-    .from("organization_members")
-    .insert({
-      organization_id: organization.id,
-      user_id: authUser.id,
-      role: ORG_CREATOR_ROLE,
-    });
-  if (memberError) {
-    // Best-effort cleanup so we don't orphan an admin-less organization.
-    await supabase.from("organizations").delete().eq("id", organization.id);
-    throw memberError;
-  }
-
-  return { organizationId: organization.id, createdOrganization: true };
+  const code =
+    typeof body.code === "string" && body.code
+      ? body.code
+      : response.status === 401
+        ? "session_expired"
+        : response.status === 409
+          ? "account_exists"
+          : "provisioning_failed";
+  throw new Error(code);
 }
