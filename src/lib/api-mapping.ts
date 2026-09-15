@@ -6,6 +6,8 @@
  * RULE: Never import from supabase/ or ../db/ in this file. Keep it frontend-safe.
  */
 
+import type { ComponentType } from "react";
+
 // -------------------------------------------------------
 // Dashboard — KPI Stats (lines 36-41 in page.tsx)
 // -------------------------------------------------------
@@ -13,7 +15,7 @@
 export interface DashboardStatsKpi {
   label: string;
   value: string | number;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   trend: string; // e.g. "+2", "3 this week", "2 high priority"
 }
 
@@ -21,13 +23,10 @@ export interface DashboardStatsKpi {
 // Team Members: COUNT(active members in caller org)
 // Upcoming Deadlines: COUNT(sprints ending ≤7d in org) + soonest 3
 // Need Attention: blocked/at-risk items
-
-export const DASHBOARD_STATS_MOCK: DashboardStatsKpi[] = [
-  { label: "Active Projects", value: "12", icon: null, trend: "+2" },
-  { label: "Team Members", value: "48", icon: null, trend: "+5" },
-  { label: "Upcoming Deadlines", value: "7", icon: null, trend: "3 this week" },
-  { label: "Need Attention", value: "3", icon: null, trend: "2 high priority" },
-];
+//
+// NOTE: Former DASHBOARD_STATS_MOCK removed — production code must consume
+// GET /api/dashboard instead of hardcoded values. Stat icons live in the
+// dashboard page (UI layer); API payloads carry value/trend only.
 
 // -------------------------------------------------------
 // Dashboard — Recent Projects (lines 43-76 in page.tsx)

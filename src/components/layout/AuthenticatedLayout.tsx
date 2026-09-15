@@ -12,10 +12,15 @@ interface AuthenticatedLayoutProps {
 export function AuthenticatedLayout({ children }: AuthenticatedLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
 
-  // Load sidebar state from localStorage on mount
+  // Load sidebar state from localStorage on mount.
+  // NOTE: intentionally a mount effect, not a lazy useState initializer —
+  // reading localStorage during render would produce different server vs
+  // client first-render output (hydration mismatch). The synchronous setState
+  // below runs once on mount and is hydration-safe.
   React.useEffect(() => {
     const saved = localStorage.getItem("sidebar-collapsed");
     if (saved) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see NOTE above
       setIsSidebarCollapsed(saved === "true");
     }
   }, []);

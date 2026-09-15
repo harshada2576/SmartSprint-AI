@@ -213,7 +213,7 @@ export default function ExecutionPage() {
               {/* Quick Stats */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Today's Summary</CardTitle>
+                  <CardTitle className="text-base">Today&apos;s Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">

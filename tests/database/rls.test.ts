@@ -665,13 +665,47 @@ describe("RLS foundation contract (static)", () => {
         for (const table of EXPECTED_TABLES) {
           expect(tables, `rowsecurity off on ${table}`).toContain(table);
         }
-        const policyCount = await runAsPrivileged(async (client) => {
+        const livePolicyNames = await runAsPrivileged(async (client) => {
+          // Explicit parentheses: AND binds tighter than OR in SQL, so the
+          // schema predicate must wrap the whole OR-group. Without the
+          // parens a future OR-branch without its own schemaname check would
+          // silently count policies from other schemas (fail-open counting).
+          // Filter on op tokens (select/insert/update/delete): RLS-03 proves
+          // every SmartSprint policy carries exactly one, so this captures
+          // exactly the migration's policies — no broad scope-token matching.
           const res = await client.query(
-            "select count(*)::int as n from pg_policies where schemaname='public' and policyname like '%select%' or schemaname='public' and policyname like '%admin%' or schemaname='public' and policyname like '%staff%' or schemaname='public' and policyname like '%member%' or schemaname='public' and policyname like '%self%' or schemaname='public' and policyname like '%own%'",
+            "SELECT policyname FROM pg_policies " +
+              "WHERE schemaname = 'public' " +
+              "AND (" +
+              "policyname LIKE '%select%' " +
+              "OR policyname LIKE '%insert%' " +
+              "OR policyname LIKE '%update%' " +
+              "OR policyname LIKE '%delete%'" +
+              ")",
           );
-          return (res.rows as Array<{ n: number }>)[0]?.n ?? 0;
+          return (res.rows as Array<{ policyname: string }>).map((r) => r.policyname);
         });
-        expect(policyCount).toBeGreaterThanOrEqual(111);
+        // Exact assertion against the migration text (source of truth): the
+        // live database must expose precisely the 111 policies the static
+        // contract proves exist — no fewer (missing enforcement) and no more
+        // (unexpected policies could be backdoors or drift).
+        const expectedPolicyNames = new Set(
+          [...readMigration().matchAll(/CREATE POLICY (\w+) ON public\.(\w+)/g)].map(
+            (m) => m[1],
+          ),
+        );
+        expect(expectedPolicyNames.size).toBe(111);
+        expect(livePolicyNames.length).toBe(111);
+        expect(new Set(livePolicyNames).size).toBe(111);
+        for (const name of expectedPolicyNames) {
+          expect(livePolicyNames, `live policy missing: ${name}`).toContain(name);
+        }
+        for (const name of livePolicyNames) {
+          expect(
+            expectedPolicyNames.has(name),
+            `unexpected live policy (not in migration): ${name}`,
+          ).toBe(true);
+        }
       },
     );
   });
