@@ -87,6 +87,12 @@ export interface TasksQuery extends PagedQuery {
   sprintId?: string;
   status?: string;
   assigneeId?: string;
+  /**
+   * Caller-scoped sentinel for `assignee=me` / `assignee_id=me`.
+   * When true, the route/service resolves the filter to the verified
+   * `auth.uid()` server-side. Never populated from a client-supplied UUID.
+   */
+  assigneeSelf?: boolean;
 }
 
 export type QueryParseSuccess<T> = { ok: true; value: T };
@@ -283,10 +289,15 @@ export function parseSprintsQuery(
 
 /**
  * GET /api/tasks — `projectId`, `sprintId`, `status` (→ `column_status`),
- * `assignee`/`assigneeId`, pagination.
+ * `assignee`/`assignee_id`, pagination.
  *
  * The `assignee` filter only narrows rows already permitted by RLS; it can
  * never broaden visibility, so developer reads stay boundary-safe.
+ *
+ * Caller-scoped form: `?assignee=me` (or `?assignee_id=me`, case-insensitive)
+ * sets `assigneeSelf: true`. The route resolves it to the verified
+ * `auth.uid()` — no client-supplied user ID is ever trusted as authority,
+ * and no `userId`/`organizationId` parameter is read here.
  */
 export function parseTasksQuery(
   searchParams: URLSearchParams,
@@ -313,18 +324,38 @@ export function parseTasksQuery(
     details,
     "status",
   );
-  const assigneeId = parseIdFilter(
-    searchParams,
-    "assignee",
-    details,
-    "assignee",
-    "assignee_id",
-  );
+  const assignee = parseAssigneeFilter(searchParams, details);
   return withPagination(searchParams, details, (paged) => ({
     ...paged,
     ...(projectId !== undefined ? { projectId } : {}),
     ...(sprintId !== undefined ? { sprintId } : {}),
     ...(status !== undefined ? { status } : {}),
-    ...(assigneeId !== undefined ? { assigneeId } : {}),
+    ...(assignee.assigneeId !== undefined
+      ? { assigneeId: assignee.assigneeId }
+      : {}),
+    ...(assignee.assigneeSelf === true ? { assigneeSelf: true as const } : {}),
   }));
+}
+
+/**
+ * Parses the task assignee filter. The literal `me` (any casing, surrounding
+ * whitespace trimmed) is a caller-scoped sentinel resolved upstream to the
+ * verified `auth.uid()`; every other non-empty value must be a UUID.
+ * Blank values are treated as absent. Unknown/invalid values push a 400
+ * `VALIDATION_ERROR` detail on field `assignee`.
+ */
+function parseAssigneeFilter(
+  searchParams: URLSearchParams,
+  details: ApiErrorDetail[],
+): { assigneeId?: string; assigneeSelf?: boolean } {
+  const raw = optionalText(searchParams, "assignee", "assignee_id");
+  if (raw === undefined) return {};
+  if (raw.toLowerCase() === "me") {
+    return { assigneeSelf: true };
+  }
+  if (!isUuid(raw)) {
+    details.push(invalidUuidDetail("assignee"));
+    return {};
+  }
+  return { assigneeId: raw };
 }

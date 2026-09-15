@@ -86,3 +86,25 @@ export interface PaginatedResult<T> {
   items: T[];
   pagination: PaginationMeta;
 }
+
+/**
+ * Mutation outcome shared by services and routes.
+ *
+ * Services return `{ ok: true, data }` or `{ ok: false, failure }` for every
+ * expected case (permission denied, missing/invisible resource, invalid
+ * references); routes map `failure.code` to the canonical error envelope via
+ * `STATUS_BY_CODE` (`FORBIDDEN` → 403, `NOT_FOUND` → 404,
+ * `VALIDATION_ERROR` → 400). Only unexpected database failures throw (routes
+ * map those to generic 500 `INTERNAL_ERROR`, never SQL/details).
+ */
+export type MutationFailureCode = "FORBIDDEN" | "NOT_FOUND" | "VALIDATION_ERROR";
+
+export interface MutationFailure {
+  code: MutationFailureCode;
+  message: string;
+  details?: ApiErrorDetail[];
+}
+
+export type MutationResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; failure: MutationFailure };

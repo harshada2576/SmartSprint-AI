@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type {
   ApiErrorCode,
   ApiErrorDetail,
+  MutationFailure,
   PaginationMeta,
 } from "@/types/api";
 
@@ -87,6 +88,36 @@ export function internalErrorResponse(): NextResponse {
   // Generic by design: never surface SQL errors, stack traces, credentials,
   // or service-role secrets. Details are logged server-side at the call site.
   return errorResponse("INTERNAL_ERROR", "Something went wrong");
+}
+
+/**
+ * Maps a service `MutationFailure` to its canonical error response.
+ * `FORBIDDEN` → 403, `NOT_FOUND` → 404, `VALIDATION_ERROR` → 400 —
+ * derived from the same `STATUS_BY_CODE` table, so mutation routes share
+ * the exact contract as every other endpoint.
+ */
+export function mutationFailureResponse(failure: MutationFailure): NextResponse {
+  if (failure.code === "FORBIDDEN") {
+    return forbiddenResponse(failure.message);
+  }
+  if (failure.code === "NOT_FOUND") {
+    return notFoundResponse(failure.message);
+  }
+  return validationErrorResponse(
+    failure.details ?? [{ field: "body", message: failure.message }],
+    failure.message,
+  );
+}
+
+/** 201 — creation success envelope (same shape as 200, creation status). */
+export function createdResponse<T>(data: T): NextResponse {
+  return NextResponse.json(
+    {
+      success: true,
+      data,
+    },
+    { status: 201 },
+  );
 }
 
 /** 200 — success envelope with optional pagination metadata and meta. */
