@@ -10,7 +10,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { SearchInput } from "@/components/ui/SearchInput";
 import { StatusChip, PriorityChip } from "@/components/ui/StatusChip";
 import { Badge } from "@/components/ui/Badge";
-import { Progress } from "@/components/ui/Progress";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Table,
   TableBody,
@@ -20,124 +21,113 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import {
-  Plus,
   Filter,
   Download,
-  Upload,
   MoreHorizontal,
   FileText,
   CheckCircle,
   AlertCircle,
   Clock,
   Sparkles,
-  ArrowRight,
-  ListTodo,
 } from "lucide-react";
+import {
+  buildQuery,
+  normalizeRequirement,
+  shortId,
+  useCollection,
+  useDebouncedValue,
+  useStatusCounts,
+  type RequirementItem,
+} from "@/lib/api-client";
+import { formatRelativeTime } from "@/lib/utils";
 
-const stats = [
-  { label: "Total Requirements", value: 65, icon: FileText },
-  { label: "Pending Validation", value: 12, icon: Clock },
-  { label: "Ready for AI", value: 18, icon: Sparkles },
-  { label: "Approved", value: 35, icon: CheckCircle },
+const PAGE_SIZE = 20;
+
+// Filter tabs use the backend requirement statuses (see parseRequirementsQuery).
+// "completed" replaces the old mock-only "approved" value, which the API rejects.
+const FILTERS = [
+  { label: "All", value: "all" },
+  { label: "Draft", value: "draft" },
+  { label: "Pending", value: "pending" },
+  { label: "In Progress", value: "inProgress" },
+  { label: "Review", value: "review" },
+  { label: "Testing", value: "testing" },
+  { label: "Completed", value: "completed" },
+  { label: "Blocked", value: "blocked" },
 ];
 
-const requirements = [
-  {
-    id: "REQ-001",
-    title: "User Authentication with Multi-Factor Authentication",
-    category: "Security",
-    businessValue: "High",
-    status: "approved",
-    priority: "high",
-    sprint: "Sprint 1",
-    assignee: "John Smith",
-    lastUpdated: "2 hours ago",
-  },
-  {
-    id: "REQ-002",
-    title: "Product Catalog Search and Filtering",
-    category: "Feature",
-    businessValue: "High",
-    status: "inProgress",
-    priority: "high",
-    sprint: "Sprint 2",
-    assignee: "Sarah Chen",
-    lastUpdated: "5 hours ago",
-  },
-  {
-    id: "REQ-003",
-    title: "Shopping Cart Persistence",
-    category: "Feature",
-    businessValue: "Medium",
-    status: "pending",
-    priority: "medium",
-    sprint: "Sprint 3",
-    assignee: "Unassigned",
-    lastUpdated: "1 day ago",
-  },
-  {
-    id: "REQ-004",
-    title: "Payment Gateway Integration",
-    category: "Feature",
-    businessValue: "High",
-    status: "review",
-    priority: "high",
-    sprint: "Sprint 2",
-    assignee: "Mike Johnson",
-    lastUpdated: "3 hours ago",
-  },
-  {
-    id: "REQ-005",
-    title: "Order Tracking System",
-    category: "Feature",
-    businessValue: "Medium",
-    status: "draft",
-    priority: "medium",
-    sprint: "-",
-    assignee: "Unassigned",
-    lastUpdated: "2 days ago",
-  },
-  {
-    id: "REQ-006",
-    title: "Customer Review and Rating System",
-    category: "Feature",
-    businessValue: "Low",
-    status: "draft",
-    priority: "low",
-    sprint: "-",
-    assignee: "Unassigned",
-    lastUpdated: "3 days ago",
-  },
-];
+function businessValueVariant(value: string): "success" | "warning" | "default" {
+  switch (value.toLowerCase()) {
+    case "high":
+      return "success";
+    case "medium":
+      return "warning";
+    default:
+      return "default";
+  }
+}
 
-const awaitingAction = [
-  { id: 1, title: "REQ-003 needs validation", type: "validation", action: "Validate" },
-  { id: 2, title: "REQ-005 missing business value", type: "missing", action: "Add Value" },
-  { id: 3, title: "REQ-004 awaiting approval", type: "approval", action: "Review" },
-];
-
-const filters = [
-  { label: "All", value: "all", count: 65 },
-  { label: "Draft", value: "draft", count: 15 },
-  { label: "Pending", value: "pending", count: 12 },
-  { label: "In Progress", value: "inProgress", count: 8 },
-  { label: "Review", value: "review", count: 5 },
-  { label: "Approved", value: "approved", count: 25 },
-];
+function formatUpdated(value: string): string {
+  if (!value) return "—";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return formatRelativeTime(value);
+}
 
 export default function RequirementsPage() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = React.useState("all");
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
-  const filteredRequirements = requirements.filter((req) => {
-    const matchesFilter = activeFilter === "all" || req.status === activeFilter;
-    const matchesSearch =
-      searchQuery === "" ||
-      req.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      req.id.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  const query = React.useMemo(
+    () =>
+      buildQuery({
+        status: activeFilter === "all" ? undefined : activeFilter,
+        search: debouncedSearch.trim() === "" ? undefined : debouncedSearch.trim(),
+        page,
+        pageSize: PAGE_SIZE,
+      }),
+    [activeFilter, debouncedSearch, page],
+  );
+
+  const { items: requirements, pagination, error, isLoading, retry } =
+    useCollection<RequirementItem>("/api/requirements", normalizeRequirement, query);
+  const { counts } = useStatusCounts("/api/requirements", [
+    "draft",
+    "pending",
+    "inProgress",
+    "review",
+    "testing",
+    "completed",
+    "blocked",
+  ]);
+
+  // Stat cards are backend totals; the stat icons stay in the UI layer.
+  const stats = [
+    { label: "Total Requirements", value: counts.total, icon: FileText },
+    { label: "Pending Validation", value: counts.byStatus["pending"] ?? 0, icon: Clock },
+    { label: "In Review", value: counts.byStatus["review"] ?? 0, icon: Sparkles },
+    { label: "Completed", value: counts.byStatus["completed"] ?? 0, icon: CheckCircle },
+  ];
+
+  // "Awaiting action" is derived from real rows needing attention.
+  const awaitingAction = requirements
+    .filter((req) => req.status === "pending" || req.status === "review" || req.status === "draft")
+    .slice(0, 3)
+    .map((req) => ({
+      id: req.id,
+      title: `${req.displayId} needs ${req.status === "review" ? "approval" : "validation"}`,
+      action: req.status === "review" ? "Review" : "Validate",
+    }));
+
+  const countFor = (value: string): number | undefined => {
+    if (value === "all") return counts.total;
+    return counts.byStatus[value];
+  };
+
+  const showLoading = isLoading && requirements.length === 0;
 
   return (
     <AuthenticatedLayout>
@@ -225,10 +215,13 @@ export default function RequirementsPage() {
 
           {/* Filters */}
           <div className="flex flex-wrap gap-2 mb-4">
-            {filters.map((filter) => (
+            {FILTERS.map((filter) => (
               <button
                 key={filter.value}
-                onClick={() => setActiveFilter(filter.value)}
+                onClick={() => {
+                  setActiveFilter(filter.value);
+                  setPage(1);
+                }}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   activeFilter === filter.value
                     ? "bg-slate-900 text-white"
@@ -243,7 +236,7 @@ export default function RequirementsPage() {
                       : "bg-slate-100"
                   }`}
                 >
-                  {filter.count}
+                  {countFor(filter.value) ?? "—"}
                 </span>
               </button>
             ))}
@@ -254,7 +247,10 @@ export default function RequirementsPage() {
             <SearchInput
               placeholder="Search requirements..."
               value={searchQuery}
-              onChange={setSearchQuery}
+              onChange={(value) => {
+                setSearchQuery(value);
+                setPage(1);
+              }}
               className="flex-1"
             />
             <div className="flex gap-2">
@@ -270,6 +266,36 @@ export default function RequirementsPage() {
           {/* Table */}
           <Card>
             <CardContent className="p-0">
+              {showLoading ? (
+                <div className="p-6">
+                  <SkeletonTable rows={6} />
+                </div>
+              ) : error !== null && requirements.length === 0 ? (
+                <div className="p-6">
+                  <EmptyState
+                    icon={AlertCircle}
+                    title="Couldn't load requirements"
+                    description={error.message}
+                    action={{ label: "Try again", onClick: retry }}
+                  />
+                </div>
+              ) : requirements.length === 0 ? (
+                <div className="p-6">
+                  <EmptyState
+                    icon={FileText}
+                    title="No requirements found"
+                    description={
+                      searchQuery.trim() !== "" || activeFilter !== "all"
+                        ? "No requirements match the current filters. Try a different search or filter."
+                        : "Requirements in your projects will show up here."
+                    }
+                    action={{
+                      label: "Add Requirement",
+                      onClick: () => router.push("/requirements/create"),
+                    }}
+                  />
+                </div>
+              ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -285,35 +311,29 @@ export default function RequirementsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRequirements.map((req) => (
+                  {requirements.map((req) => (
                     <TableRow
                       key={req.id}
                       className="cursor-pointer"
                       onClick={() => router.push(`/requirements/${req.id}`)}
                     >
                       <TableCell className="font-mono text-xs text-slate-500">
-                        {req.id}
+                        {req.displayId}
                       </TableCell>
                       <TableCell className="font-medium text-slate-900 max-w-xs truncate">
                         {req.title}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" size="sm">
-                          {req.category}
+                          {req.category || "—"}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={
-                            req.businessValue === "High"
-                              ? "success"
-                              : req.businessValue === "Medium"
-                              ? "warning"
-                              : "default"
-                          }
+                          variant={businessValueVariant(req.businessValue)}
                           size="sm"
                         >
-                          {req.businessValue}
+                          {req.businessValue || "—"}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -322,8 +342,12 @@ export default function RequirementsPage() {
                       <TableCell>
                         <PriorityChip priority={req.priority} size="sm" />
                       </TableCell>
-                      <TableCell>{req.sprint}</TableCell>
-                      <TableCell>{req.assignee}</TableCell>
+                      <TableCell>
+                        {req.sprintId ? shortId(req.sprintId) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {req.assigneeId ? shortId(req.assigneeId) : "Unassigned"}
+                      </TableCell>
                       <TableCell>
                         <Button variant="ghost" size="icon-sm">
                           <MoreHorizontal className="h-4 w-4" />
@@ -333,8 +357,40 @@ export default function RequirementsPage() {
                   ))}
                 </TableBody>
               </Table>
+              )}
             </CardContent>
           </Card>
+
+          {!showLoading && error === null && pagination.total > 0 ? (
+            <div className="flex items-center justify-between mt-4">
+              <p className="text-sm text-slate-500">
+                Page {pagination.page} of {Math.max(pagination.totalPages, 1)} ·{" "}
+                {pagination.total} requirement{pagination.total === 1 ? "" : "s"}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage((current) => Math.max(current - 1, 1))}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setPage((current) =>
+                      pagination.totalPages > 0
+                        ? Math.min(current + 1, pagination.totalPages)
+                        : current + 1,
+                    )
+                  }
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="validation" className="mt-6">

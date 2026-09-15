@@ -10,6 +10,8 @@ import { SearchInput } from "@/components/ui/SearchInput";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { Progress } from "@/components/ui/Progress";
 import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import {
   Table,
   TableBody,
@@ -19,7 +21,6 @@ import {
   TableRow,
 } from "@/components/ui/Table";
 import {
-  Plus,
   Filter,
   Download,
   MoreHorizontal,
@@ -27,112 +28,85 @@ import {
   Calendar,
   Users,
   ArrowUpDown,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
+import {
+  buildQuery,
+  normalizeProject,
+  useCollection,
+  useDebouncedValue,
+  useStatusCounts,
+  type ProjectItem,
+} from "@/lib/api-client";
+import { formatDate } from "@/lib/utils";
 
-const projects = [
-  {
-    id: 1,
-    name: "E-Commerce Platform Redesign",
-    code: "ECOM-2025",
-    client: "RetailCorp Inc.",
-    manager: "John Smith",
-    status: "active",
-    progress: 65,
-    sprint: "Sprint 4",
-    endDate: "2025-09-15",
-    team: 8,
-    priority: "high",
-  },
-  {
-    id: 2,
-    name: "Mobile Banking App",
-    code: "BANK-2025",
-    client: "FinanceFirst Bank",
-    manager: "Sarah Chen",
-    status: "active",
-    progress: 42,
-    sprint: "Sprint 2",
-    endDate: "2025-10-30",
-    team: 12,
-    priority: "high",
-  },
-  {
-    id: 3,
-    name: "Healthcare Portal",
-    code: "HEALTH-2025",
-    client: "MedCare Systems",
-    manager: "Mike Johnson",
-    status: "pending",
-    progress: 15,
-    sprint: "-",
-    endDate: "2025-12-01",
-    team: 6,
-    priority: "medium",
-  },
-  {
-    id: 4,
-    name: "CRM Integration",
-    code: "CRM-2025",
-    client: "SalesPro LLC",
-    manager: "Emily Davis",
-    status: "completed",
-    progress: 100,
-    sprint: "Sprint 8",
-    endDate: "2025-06-30",
-    team: 5,
-    priority: "low",
-  },
-  {
-    id: 5,
-    name: "Data Analytics Dashboard",
-    code: "ANALYTICS-2025",
-    client: "TechCorp Solutions",
-    manager: "David Wilson",
-    status: "active",
-    progress: 78,
-    sprint: "Sprint 6",
-    endDate: "2025-08-20",
-    team: 7,
-    priority: "medium",
-  },
-  {
-    id: 6,
-    name: "Inventory Management System",
-    code: "INV-2025",
-    client: "Logistics Pro",
-    manager: "Lisa Anderson",
-    status: "blocked",
-    progress: 35,
-    sprint: "Sprint 3",
-    endDate: "2025-11-15",
-    team: 4,
-    priority: "high",
-  },
+const PAGE_SIZE = 20;
+
+// Filter tabs mirror the backend project statuses (see parseProjectsQuery).
+const FILTERS = [
+  { label: "All Projects", value: "all" },
+  { label: "Active", value: "active" },
+  { label: "Pending", value: "pending" },
+  { label: "Completed", value: "completed" },
+  { label: "Blocked", value: "blocked" },
 ];
 
-const filters = [
-  { label: "All Projects", value: "all", count: 12 },
-  { label: "Active", value: "active", count: 7 },
-  { label: "Pending", value: "pending", count: 2 },
-  { label: "Completed", value: "completed", count: 2 },
-  { label: "Blocked", value: "blocked", count: 1 },
-];
+function priorityBadgeVariant(priority: string): "danger" | "warning" | "success" | "default" {
+  switch (priority) {
+    case "high":
+      return "danger";
+    case "medium":
+      return "warning";
+    case "low":
+      return "success";
+    default:
+      return "default";
+  }
+}
+
+function formatEndDate(value: string | null): string {
+  if (!value) return "—";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return formatDate(value);
+}
 
 export default function ProjectsPage() {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = React.useState("all");
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesFilter =
-      activeFilter === "all" || project.status === activeFilter;
-    const matchesSearch =
-      searchQuery === "" ||
-      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.code.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesFilter && matchesSearch;
-  });
+  const query = React.useMemo(
+    () =>
+      buildQuery({
+        status: activeFilter === "all" ? undefined : activeFilter,
+        search: debouncedSearch.trim() === "" ? undefined : debouncedSearch.trim(),
+        page,
+        pageSize: PAGE_SIZE,
+      }),
+    [activeFilter, debouncedSearch, page],
+  );
+
+  const { items: projects, pagination, error, isLoading, retry } =
+    useCollection<ProjectItem>("/api/projects", normalizeProject, query);
+  const { counts } = useStatusCounts("/api/projects", [
+    "active",
+    "pending",
+    "completed",
+    "blocked",
+  ]);
+
+  const countFor = (value: string): number | undefined => {
+    // Counts come from the backend (pagination totals); no hardcoded numbers.
+    if (value === "all") return counts.total;
+    return counts.byStatus[value];
+  };
+
+  const showLoading = isLoading && projects.length === 0;
 
   return (
     <AuthenticatedLayout>
@@ -159,10 +133,13 @@ export default function ProjectsPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4 mb-6">
         <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
-          {filters.map((filter) => (
+          {FILTERS.map((filter) => (
             <button
               key={filter.value}
-              onClick={() => setActiveFilter(filter.value)}
+              onClick={() => {
+                setActiveFilter(filter.value);
+                setPage(1);
+              }}
               className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
                 activeFilter === filter.value
                   ? "bg-slate-900 text-white"
@@ -177,7 +154,7 @@ export default function ProjectsPage() {
                     : "bg-slate-100"
                 }`}
               >
-                {filter.count}
+                {countFor(filter.value) ?? "—"}
               </span>
             </button>
           ))}
@@ -189,7 +166,10 @@ export default function ProjectsPage() {
         <SearchInput
           placeholder="Search projects by name, client, or code..."
           value={searchQuery}
-          onChange={setSearchQuery}
+          onChange={(value) => {
+            setSearchQuery(value);
+            setPage(1);
+          }}
           className="flex-1"
         />
         <div className="flex gap-2">
@@ -208,6 +188,36 @@ export default function ProjectsPage() {
       {/* Projects Table */}
       <Card>
         <CardContent className="p-0">
+          {showLoading ? (
+            <div className="p-6">
+              <SkeletonTable rows={6} />
+            </div>
+          ) : error !== null && projects.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                icon={AlertCircle}
+                title="Couldn't load projects"
+                description={error.message}
+                action={{ label: "Try again", onClick: retry }}
+              />
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                icon={FolderKanban}
+                title="No projects found"
+                description={
+                  searchQuery.trim() !== "" || activeFilter !== "all"
+                    ? "No projects match the current filters. Try a different search or filter."
+                    : "Projects in your organization will show up here."
+                }
+                action={{
+                  label: "Create Project",
+                  onClick: () => router.push("/projects/create"),
+                }}
+              />
+            </div>
+          ) : (
           <Table>
             <TableHeader>
               <TableRow>
@@ -223,7 +233,7 @@ export default function ProjectsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProjects.map((project) => (
+              {projects.map((project) => (
                 <TableRow
                   key={project.id}
                   className="cursor-pointer"
@@ -234,23 +244,23 @@ export default function ProjectsPage() {
                       <p className="font-medium text-slate-900">
                         {project.name}
                       </p>
-                      <p className="text-xs text-slate-500">{project.code}</p>
+                      {project.code ? (
+                        <p className="text-xs text-slate-500">{project.code}</p>
+                      ) : null}
                     </div>
                   </TableCell>
-                  <TableCell>{project.client}</TableCell>
-                  <TableCell>{project.manager}</TableCell>
+                  <TableCell>{project.client ?? "—"}</TableCell>
+                  {/* The projects API returns a manager id only; names need a
+                      users endpoint (see integration report). */}
+                  <TableCell>
+                    {project.managerId ? `ID ${project.managerId.slice(0, 8)}` : "Unassigned"}
+                  </TableCell>
                   <TableCell>
                     <StatusChip status={project.status} size="sm" />
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={
-                        project.priority === "high"
-                          ? "danger"
-                          : project.priority === "medium"
-                          ? "warning"
-                          : "success"
-                      }
+                      variant={priorityBadgeVariant(project.priority)}
                       size="sm"
                     >
                       {project.priority}
@@ -267,13 +277,14 @@ export default function ProjectsPage() {
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <Users className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-sm">{project.team}</span>
+                      {/* Team size is not exposed by GET /api/projects. */}
+                      <span className="text-sm">—</span>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5">
                       <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                      <span className="text-sm">{project.endDate}</span>
+                      <span className="text-sm">{formatEndDate(project.endDate)}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -291,8 +302,41 @@ export default function ProjectsPage() {
               ))}
             </TableBody>
           </Table>
+          )}
         </CardContent>
       </Card>
+
+      {/* Pagination (backend-driven; hidden while loading or when empty) */}
+      {!showLoading && error === null && pagination.total > 0 ? (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-sm text-slate-500">
+            Page {pagination.page} of {Math.max(pagination.totalPages, 1)} ·{" "}
+            {pagination.total} project{pagination.total === 1 ? "" : "s"}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(current - 1, 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                setPage((current) =>
+                  pagination.totalPages > 0
+                    ? Math.min(current + 1, pagination.totalPages)
+                    : current + 1,
+                )
+              }
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </AuthenticatedLayout>
   );
 }
