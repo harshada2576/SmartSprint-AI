@@ -52,10 +52,8 @@ export function getAuthErrorMessage(error: unknown): string {
   ) {
     return "We couldn't set up your organization. Please check the organization name and try again.";
   }
-  if (normalized.includes("contact your administrator") || normalized.includes("admin")) {
-    return raw;
-  }
-
+  // Never return raw server output. Even messages mentioning admin/support
+  // could carry SQL, keys, or internals from a downstream failure.
   return "Something went wrong. Please try again.";
 }
 
