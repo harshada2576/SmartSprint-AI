@@ -571,13 +571,22 @@ describe("RLS foundation contract (static)", () => {
     });
   });
 
-  describe("documented variances vs auth-rls-test-plan (report-only, suite stays green)", () => {
-    it("V1: teams SELECT is org-wide (plan MEMB-04/RBAC-TEAM-01 expects DEV own-team-only)", () => {
+  describe("variances vs auth-rls-test-plan + resolved controls (V1/V3 now enforced)", () => {
+    it("teams SELECT restricts developers to their own teams while staff retain org visibility", () => {
       const sql = readMigration();
       const block = sql.match(/CREATE POLICY teams_select_org_member[\s\S]*?;/)?.[0];
-      // Migration fact: any org member reads every team in the org.
-      expect(block).toMatch(/smartsprint_is_org_member\(organization_id\)/);
-      expect(block).not.toMatch(/project_member|team_member/);
+      expect(block, "teams_select_org_member policy missing").toBeDefined();
+      const text = block ?? "";
+      // Organization-membership protection: org members/staff gate (fail-closed).
+      expect(text).toMatch(/smartsprint_is_org_member\s*\(\s*organization_id\s*\)/);
+      expect(text).toMatch(/smartsprint_is_org_staff\s*\(\s*organization_id\s*\)/);
+      // Developer/team-membership restriction: developers see only teams they
+      // belong to — semantic check, not alias- or formatting-dependent.
+      expect(text.toLowerCase()).toMatch(/team_members/);
+      expect(text).toMatch(/auth\.uid\(\)/);
+      // Must not be unrestricted.
+      expect(text).not.toMatch(/USING\s*\(\s*true\s*\)/i);
+      expect(text).not.toMatch(/WITH\s+CHECK\s*\(\s*true\s*\)/i);
     });
 
     it("V2: deletes are uniformly ADMIN-only (plan grants PM delete in RBAC-TASK-02/RBAC-BACK-01)", () => {
@@ -590,12 +599,21 @@ describe("RLS foundation contract (static)", () => {
       }
     });
 
-    it("V3: change_requests UPDATE lacks the approvals-style no-self-decide guard (likely flaw, reported)", () => {
+    it("change_requests UPDATE enforces no-self-decision (approvals-parity, GOV-CHG-01)", () => {
       const sql = readMigration();
       const block = sql.match(/CREATE POLICY change_requests_update_staff[\s\S]*?;/)?.[0];
-      expect(block).toBeDefined();
-      // Approvals has this; change_requests does not — behavioral live test pins deny.
-      expect(block).not.toMatch(/requester_id IS DISTINCT FROM/);
+      expect(block, "change_requests_update_staff policy missing").toBeDefined();
+      const text = block ?? "";
+      // Staff-only decision lane preserved.
+      expect(text).toMatch(/smartsprint_is_org_staff/);
+      // Real invariant: a requester cannot approve or reject their own request.
+      // Approvals-parity guard — pending edits allowed, decisions require a
+      // different user (NULL-safe).
+      expect(text).toMatch(/requester_id IS DISTINCT FROM auth\.uid\(\)/);
+      expect(text).toMatch(/status\s*=\s*'pending'/);
+      // Must not be unrestricted.
+      expect(text).not.toMatch(/USING\s*\(\s*true\s*\)/i);
+      expect(text).not.toMatch(/WITH\s+CHECK\s*\(\s*true\s*\)/i);
     });
 
     it("V4: activity_logs SELECT includes a user_id=self OR-branch (cross-org own-action rows readable)", () => {
