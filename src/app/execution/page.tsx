@@ -71,10 +71,29 @@ export default function ExecutionPage() {
     () => buildQuery({ page: 1, pageSize: TEAM_PAGE_SIZE }),
     [],
   );
-  const { items: teamTasks, error, isLoading, retry } =
-    useCollection<TaskItem>("/api/tasks", normalizeTask, teamQuery);
+  const {
+    items: teamTasks,
+    error: teamError,
+    isLoading: teamIsLoading,
+    retry: retryTeam,
+  } = useCollection<TaskItem>("/api/tasks", normalizeTask, teamQuery);
 
-  const showLoading = isLoading && teamTasks.length === 0;
+  // My Work uses the caller-scoped form GET /api/tasks?assignee=me. The
+  // literal "me" is resolved server-side to the authenticated Supabase user;
+  // no client user ID, localStorage identity, or /api/me lookup is used.
+  const myWorkQuery = React.useMemo(
+    () => buildQuery({ assignee: "me", page: 1, pageSize: TEAM_PAGE_SIZE }),
+    [],
+  );
+  const {
+    items: myTasks,
+    error: myWorkError,
+    isLoading: myWorkIsLoading,
+    retry: retryMyWork,
+  } = useCollection<TaskItem>("/api/tasks", normalizeTask, myWorkQuery);
+
+  const showLoading = teamIsLoading && teamTasks.length === 0;
+  const showMyWorkLoading = myWorkIsLoading && myTasks.length === 0;
 
   // Summary counts are computed from the loaded team page (real rows only).
   const inProgressCount = teamTasks.filter(
@@ -123,20 +142,95 @@ export default function ExecutionPage() {
         </TabsList>
 
         <TabsContent value="mywork" className="mt-6">
-          {/* User-scoped tasks need a /api/me (or assignee-aware) endpoint to
-              resolve the caller server-side; localStorage userIds must never
-              be used as auth. Until then, My Work stays an honest empty
-              state instead of mock tasks (see integration report). */}
+          {showMyWorkLoading ? (
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                {[0, 1, 2, 3].map((index) => (
+                  <div key={index} className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : myWorkError !== null && myTasks.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">
+                <EmptyState
+                  icon={AlertCircle}
+                  title="Couldn't load your work"
+                  description={myWorkError.message}
+                  action={{ label: "Try again", onClick: retryMyWork }}
+                />
+              </CardContent>
+            </Card>
+          ) : myTasks.length === 0 ? (
           <Card>
             <CardContent className="p-6">
               <EmptyState
                 icon={CheckSquare}
-                title="My work isn't available yet"
-                description="Showing your assigned tasks needs a user-scoped tasks endpoint. Team work below is already live."
+                title="No tasks assigned to you"
+                description="Tasks assigned to you will show up here. Team work below is already live."
                 action={{ label: "View team work", onClick: () => setTab("team") }}
               />
             </CardContent>
           </Card>
+          ) : (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">My Tasks</CardTitle>
+              <Badge variant="secondary" size="sm">
+                {myTasks.length} tasks
+              </Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-100">
+                {myTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                    onClick={() => router.push(`/tasks/${task.id}`)}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className="font-mono text-xs text-slate-400">
+                          {task.displayId}
+                        </span>
+                        <h4 className="font-medium text-slate-900">
+                          {task.title}
+                        </h4>
+                      </div>
+                      <PriorityChip priority={task.priority} size="sm" />
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-slate-500 mb-3">
+                      <span>{shortId(task.projectId)}</span>
+                      <span>•</span>
+                      <span>
+                        {task.sprintId ? shortId(task.sprintId) : "No sprint"}
+                      </span>
+                      <span>•</span>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>Due {formatDueDate(task.dueDate)}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        {/* Stage-based estimate: the tasks API exposes no
+                            percent-complete field. */}
+                        <Progress value={taskStageProgress(task.columnStatus)} size="sm" />
+                      </div>
+                      <span className="text-xs text-slate-500 w-10">
+                        {taskStageProgress(task.columnStatus)}%
+                      </span>
+                      <StatusChip status={task.columnStatus} size="sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="team" className="mt-6">
@@ -151,14 +245,14 @@ export default function ExecutionPage() {
                 ))}
               </CardContent>
             </Card>
-          ) : error !== null && teamTasks.length === 0 ? (
+          ) : teamError !== null && teamTasks.length === 0 ? (
             <Card>
               <CardContent className="p-6">
                 <EmptyState
                   icon={AlertCircle}
                   title="Couldn't load team work"
-                  description={error.message}
-                  action={{ label: "Try again", onClick: retry }}
+                  description={teamError.message}
+                  action={{ label: "Try again", onClick: retryTeam }}
                 />
               </CardContent>
             </Card>
@@ -301,7 +395,7 @@ export default function ExecutionPage() {
           </div>
           )}
 
-          {!showLoading && error === null && teamTasks.length > 0 ? (
+          {!showLoading && teamError === null && teamTasks.length > 0 ? (
           <Card className="mt-6">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Team Work</CardTitle>

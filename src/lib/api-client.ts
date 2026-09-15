@@ -318,32 +318,31 @@ export interface UseCollectionResult<T> {
 /**
  * Loads a paginated collection. `query` must be a memoized `?…` string
  * (see `buildQuery`); the request re-runs when it changes. No mock fallback.
+ *
+ * Loading state is derived by comparing the loaded snapshot key with the
+ * requested key, so no setState-in-effect is needed.
  */
 export function useCollection<T>(
   endpoint: string,
   normalize: Normalizer<T>,
   query = "",
 ): UseCollectionResult<T> {
-  const [items, setItems] = React.useState<T[]>([]);
-  const [pagination, setPagination] = React.useState<PaginationMeta>({
-    page: 1,
-    pageSize: 20,
-    total: 0,
-    totalPages: 0,
-  });
-  const [meta, setMeta] = React.useState<Record<string, unknown>>({});
-  const [error, setError] = React.useState<ApiError | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const key = `${endpoint}${query}`;
   const [attempt, setAttempt] = React.useState(0);
+  const [snapshot, setSnapshot] = React.useState<{
+    key: string;
+    items: T[];
+    pagination: PaginationMeta;
+    meta: Record<string, unknown>;
+    error: ApiError | null;
+  } | null>(null);
 
   React.useEffect(() => {
+    let cancelled = false;
     const controller = new AbortController();
-    setIsLoading(true);
-    setError(null);
     (async () => {
       try {
-        const url = `${endpoint}${query}`;
-        const payload = await getJson(url, controller.signal, "Could not load data");
+        const payload = await getJson(key, controller.signal, "Could not load data");
         if (!isRecord(payload)) {
           throw new ApiError(
             "INTERNAL_ERROR",
@@ -356,39 +355,60 @@ export function useCollection<T>(
           const item = normalize(entry);
           if (item !== null) next.push(item);
         }
-        if (controller.signal.aborted) return;
-        setItems(next);
-        setPagination(normalizePagination(payload.pagination));
-        setMeta(isRecord(payload.meta) ? payload.meta : {});
-        setIsLoading(false);
+        if (cancelled) return;
+        setSnapshot({
+          key,
+          items: next,
+          pagination: normalizePagination(payload.pagination),
+          meta: isRecord(payload.meta) ? payload.meta : {},
+          error: null,
+        });
       } catch (fetchError: unknown) {
-        if (controller.signal.aborted) return;
+        if (cancelled) return;
         if (
           fetchError instanceof DOMException &&
           fetchError.name === "AbortError"
         )
           return;
-        setError(
-          fetchError instanceof ApiError
-            ? fetchError
-            : new ApiError("INTERNAL_ERROR", "Something went wrong loading data."),
-        );
-        setIsLoading(false);
+        setSnapshot({
+          key,
+          items: [],
+          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+          meta: {},
+          error:
+            fetchError instanceof ApiError
+              ? fetchError
+              : new ApiError("INTERNAL_ERROR", "Something went wrong loading data."),
+        });
       }
     })();
-    return () => controller.abort();
-    // `normalize` is a module-level pure function; `endpoint`/`query`/`attempt`
-    // fully describe the request.
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // `key` fully describes the request; `normalize` is a module-level pure
+    // function and `attempt` is the manual retry counter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, query, attempt]);
+  }, [key, attempt]);
 
   const retry = React.useCallback(() => {
-    setError(null);
-    setIsLoading(true);
     setAttempt((count) => count + 1);
   }, []);
 
-  return { items, pagination, meta, error, isLoading, retry };
+  const current = snapshot !== null && snapshot.key === key ? snapshot : null;
+  return {
+    items: current?.items ?? [],
+    pagination: current?.pagination ?? {
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+    },
+    meta: current?.meta ?? {},
+    error: current?.error ?? null,
+    isLoading: current === null,
+    retry,
+  };
 }
 
 export interface StatusCounts {
@@ -407,19 +427,20 @@ export function useStatusCounts(
   endpoint: string,
   statuses: string[],
 ): { counts: StatusCounts; error: ApiError | null; isLoading: boolean; retry: () => void } {
-  const [counts, setCounts] = React.useState<StatusCounts>({ total: 0, byStatus: {} });
-  const [error, setError] = React.useState<ApiError | null>(null);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [attempt, setAttempt] = React.useState(0);
+  const [snapshot, setSnapshot] = React.useState<{
+    key: string;
+    counts: StatusCounts;
+    error: ApiError | null;
+  } | null>(null);
   const key = React.useMemo(
     () => JSON.stringify({ endpoint, statuses }),
     [endpoint, statuses],
   );
 
   React.useEffect(() => {
+    let cancelled = false;
     const controller = new AbortController();
-    setIsLoading(true);
-    setError(null);
     (async () => {
       try {
         const probes: Array<{ status: string | null; promise: Promise<CollectionResult<unknown>> }> = [
@@ -441,7 +462,7 @@ export function useStatusCounts(
           })),
         ];
         const settled = await Promise.all(probes.map((probe) => probe.promise));
-        if (controller.signal.aborted) return;
+        if (cancelled) return;
         const byStatus: Record<string, number> = {};
         settled.forEach((result, index) => {
           const status = probes[index]?.status;
@@ -449,31 +470,43 @@ export function useStatusCounts(
             byStatus[status] = result.pagination.total;
           }
         });
-        setCounts({ total: settled[0]?.pagination.total ?? 0, byStatus });
-        setIsLoading(false);
+        setSnapshot({
+          key,
+          counts: { total: settled[0]?.pagination.total ?? 0, byStatus },
+          error: null,
+        });
       } catch (fetchError: unknown) {
-        if (controller.signal.aborted) return;
+        if (cancelled) return;
         if (fetchError instanceof DOMException && fetchError.name === "AbortError")
           return;
-        setError(
-          fetchError instanceof ApiError
-            ? fetchError
-            : new ApiError("INTERNAL_ERROR", "Something went wrong loading counts."),
-        );
-        setIsLoading(false);
+        setSnapshot({
+          key,
+          counts: { total: 0, byStatus: {} },
+          error:
+            fetchError instanceof ApiError
+              ? fetchError
+              : new ApiError("INTERNAL_ERROR", "Something went wrong loading counts."),
+        });
       }
     })();
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, attempt]);
 
   const retry = React.useCallback(() => {
-    setError(null);
-    setIsLoading(true);
     setAttempt((count) => count + 1);
   }, []);
 
-  return { counts, error, isLoading, retry };
+  const current = snapshot !== null && snapshot.key === key ? snapshot : null;
+  return {
+    counts: current?.counts ?? { total: 0, byStatus: {} },
+    error: current?.error ?? null,
+    isLoading: current === null,
+    retry,
+  };
 }
 
 /** Debounces a fast-changing input (e.g. search) before it becomes a query. */

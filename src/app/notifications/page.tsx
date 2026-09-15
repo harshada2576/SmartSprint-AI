@@ -329,6 +329,9 @@ export default function NotificationsPage() {
                 >
                   Mark Read
                 </Button>
+                {/* Clear (delete) is intentionally unwired: no DELETE
+                    /api/notifications endpoint exists, so deletion must not
+                    be faked. Kept visually consistent; see integration report. */}
                 <Button variant="ghost" size="sm" leftIcon={<Trash2 className="h-4 w-4" />}>
                   Clear
                 </Button>
