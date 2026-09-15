@@ -112,8 +112,9 @@ async function findUniqueSlug(
  *   never merges or re-owns rows.
  *
  * Safe to retry: repeated calls for the same identity return the existing
- * membership without creating duplicates (best-effort; see docs for the
- * concurrent double-POST limitation).
+ * membership without creating duplicates. Concurrent first-time calls are
+ * reconciled post-insert (see step 6): the earliest membership wins and a
+ * just-created orphan org is best-effort cleaned up, so retries converge.
  */
 export async function ensureUserProvisionedServerOnly(
   verifiedUser: VerifiedProvisioningIdentity,
@@ -214,7 +215,39 @@ export async function ensureUserProvisionedServerOnly(
   if (memberError) {
     // Best-effort cleanup so a retry does not orphan an admin-less org.
     await supabase.from("organizations").delete().eq("id", organization.id);
+    // A concurrent first-time provision may have won the race: return the
+    // existing membership instead of failing when one now exists.
+    const { data: raced } = await supabase
+      .from("organization_members")
+      .select("organization_id, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (raced && raced.length > 0) {
+      return {
+        organizationId: raced[0].organization_id as string,
+        createdOrganization: false,
+      };
+    }
     throw memberError;
+  }
+
+  // 6. Concurrent-bootstrap reconciliation: two simultaneous first-time
+  //    calls can both pass the step-3 gate before either inserts. The
+  //    earliest membership wins; if this call lost, best-effort delete the
+  //    just-created orphan org and return the winner. Never touches
+  //    pre-existing orgs.
+  const { data: allMemberships } = await supabase
+    .from("organization_members")
+    .select("organization_id, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true });
+  if (allMemberships && allMemberships.length > 1) {
+    const winner = allMemberships[0].organization_id as string;
+    if (winner !== organization.id) {
+      await supabase.from("organizations").delete().eq("id", organization.id);
+      return { organizationId: winner, createdOrganization: false };
+    }
   }
 
   return { organizationId: organization.id, createdOrganization: true };
