@@ -116,6 +116,15 @@ describe("role escalation (static gates)", () => {
     expect(policy("team_members_admin_insert")).toMatch(/smartsprint_is_org_admin/);
   });
 
+  it("teams SELECT restricts developers to member teams; staff keep org visibility (MEMB-04)", () => {
+    const block = policy("teams_select_org_member");
+    expect(block).toMatch(/smartsprint_is_org_member\s*\(\s*organization_id\s*\)/);
+    expect(block).toMatch(/smartsprint_is_org_staff\s*\(\s*organization_id\s*\)/);
+    expect(block.toLowerCase()).toMatch(/team_members/);
+    expect(block).toMatch(/auth\.uid\(\)/);
+    expect(block).not.toMatch(/USING\s*\(\s*true\s*\)/i);
+  });
+
   it("DEVELOPER/PM cannot modify budgets; contracts need staff; milestones need staff (GOV-*)", () => {
     expect(policy("budget_line_items_admin_insert")).toMatch(/smartsprint_is_org_admin/);
     expect(policy("contracts_insert_staff")).toMatch(/smartsprint_is_org_staff/);
@@ -519,6 +528,15 @@ describe("governance (static gates)", () => {
   it("approvals request/decide split with attribution to self (GOV-APR-01/02)", () => {
     expect(policy("approvals_insert_staff")).toMatch(/requester_id = auth\.uid\(\)/);
     expect(policy("approvals_update_staff")).toMatch(/decided_by IS NULL OR decided_by = auth\.uid\(\)/);
+  });
+
+  it("change_requests no-self-decision with approvals parity (GOV-CHG-01)", () => {
+    const block = policy("change_requests_update_staff");
+    expect(block).toMatch(/smartsprint_is_org_staff/);
+    // Requester cannot approve or reject their own request; pending edits stay allowed.
+    expect(block).toMatch(/requester_id IS DISTINCT FROM auth\.uid\(\)/);
+    expect(block).toMatch(/status\s*=\s*'pending'/);
+    expect(block).not.toMatch(/USING\s*\(\s*true\s*\)/i);
   });
 
   it("ai_predictions approval gated to staff with truthful attribution (AI-02)", () => {
@@ -1175,12 +1193,11 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
     });
   });
 
-  it(`MEMB-04/V1/live (plan normative): developer cannot read foreign-team rows ${formatCase(ACTORS.devA1, "SELECT", "teams[non-member team]", "zero rows")}`, async (ctx) => {
+  it(`MEMB-04/live: developer cannot read foreign-team rows ${formatCase(ACTORS.devA1, "SELECT", "teams[non-member team]", "zero rows")}`, async (ctx) => {
     await live(ctx, async () => {
-      // The migration implements org-wide team reads (static variance V1) while
-      // the test plan (RBAC-TEAM-01/MEMB-04) requires own-team-only DEV reads.
-      // Plan-normative expectation: hidden. If this fails live, the team-read
-      // scope needs explicit product sign-off (plan §19). Reported, not weakened.
+      // Enforced by teams_select_org_member: staff see org teams, developers
+      // see only teams with a team_members row for auth.uid() (plan
+      // RBAC-TEAM-01/MEMB-04). Plan-normative expectation: hidden.
       const foreignTeam = await runAsPrivileged(async (client) => {
         const res = await client.query(
           `select t.id from public.teams t where t.organization_id = $1
