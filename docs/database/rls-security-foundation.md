@@ -54,7 +54,7 @@ the owning org, `admin` = ADMIN only, `self`/`own` = `auth.uid()`-scoped.
 | `organizations` | `organizations_select_member` (member orgs only) | — (trusted lane) | `organizations_admin_update` | — (trusted lane) |
 | `organization_members` | `organization_members_select_member` | `organization_members_admin_insert` | `organization_members_admin_update` | `organization_members_admin_delete` |
 | `users` | `users_select_self`, `users_select_org_directory` (shared-org only) | `users_insert_self` (`id = auth.uid()`) | `users_update_self`, `users_update_admin` | — (via `auth.users` cascade / trusted lane) |
-| `teams` | `teams_select_org_member` | `teams_admin_insert` (lead must be org member) | `teams_admin_update` | `teams_admin_delete` |
+| `teams` | `teams_select_org_member` (staff: all org teams; developers: member teams only via `team_members` + `auth.uid()`) | `teams_admin_insert` (lead must be org member) | `teams_admin_update` | `teams_admin_delete` |
 | `team_members` | `team_members_select_org_member` | `team_members_admin_insert` (added user must be org member) | — (no payload) | `team_members_admin_delete` |
 | `projects` | `projects_select_org_staff` (ADMIN/PM all-in-org), `projects_select_member` (DEV: member projects only) | `projects_insert_staff` | `projects_update_staff` | `projects_delete_admin` |
 | `project_members` | `project_members_select_org_member` | `project_members_admin_insert` (no self-enrollment) | — | `project_members_admin_delete` |
@@ -71,7 +71,7 @@ the owning org, `admin` = ADMIN only, `self`/`own` = `auth.uid()`-scoped.
 | `contracts` | `contracts_select_staff`, `contracts_select_member` | `contracts_insert_staff` | `contracts_update_staff` | `contracts_delete_admin` |
 | `approvals` | `approvals_select_staff`, `approvals_select_member` | `approvals_insert_member`, `approvals_insert_staff` (requester=self, pending, undecided) | `approvals_update_staff` (decider=self, no self-approval) | `approvals_delete_admin` |
 | `risks` | `risks_select_staff`, `risks_select_member` | `risks_insert_member`, `risks_insert_staff` (DEV may file) | `risks_update_staff` (DEV create-only) | `risks_delete_admin` |
-| `change_requests` | `change_requests_select_staff`, `change_requests_select_member` | `change_requests_insert_member`, `change_requests_insert_staff` | `change_requests_update_staff` | `change_requests_delete_admin` |
+| `change_requests` | `change_requests_select_staff`, `change_requests_select_member` | `change_requests_insert_member`, `change_requests_insert_staff` | `change_requests_update_staff` (staff-only; no self-decision: `status='pending'` or `requester_id IS DISTINCT FROM auth.uid()`, approvals-parity) | `change_requests_delete_admin` |
 | `milestones` | `milestones_select_staff`, `milestones_select_member` | `milestones_insert_staff` (DEV read-only) | `milestones_update_staff` | `milestones_delete_admin` |
 | `folders` | `folders_select_staff`, `folders_select_member` | `folders_insert_staff`, `folders_insert_member` (`created_by = self`, parent same-project) | `folders_update_staff`, `folders_update_dev_own` (own only) | `folders_delete_admin` |
 | `documents` | `documents_select_staff`, `documents_select_member` | `documents_insert_staff`, `documents_insert_member` (`owner = self`, folder same-project) | `documents_update_staff`, `documents_update_dev_own` (own only) | `documents_delete_admin` |
@@ -222,7 +222,9 @@ own `users` self-row/own preferences after profile creation (fail-closed).
    writes are ADMIN-only; `users` has no role column and `users.id` is
    trigger-pinned; request/decide attribution forced (`requester_id`,
    `decided_by`, `approved_by`, `owner_id`, `created_by` = self where
-   applicable); no self-approval (`requester DISTINCT FROM decider`);
+   applicable); no self-approval on `approvals` (`requester DISTINCT FROM
+   decider`) and no self-decision on `change_requests` (`status='pending'` or
+   `requester_id IS DISTINCT FROM auth.uid()`, approvals-parity);
    budgets ADMIN-only; audit tables client-immutable.
 8. **Regression safety**: `npm run typecheck` passes; `git status` shows only
    the new migration + this doc (allowed paths).
@@ -250,9 +252,13 @@ own `users` self-row/own preferences after profile creation (fail-closed).
    without it).
 3. **PM invitation-send** (§12-Q3): implemented as ADMIN-only (v1 default per
    test plan). Flip by adding a staff INSERT policy if product confirms.
-4. **DEV team-visibility strictness**: team reads are org-scoped (any org
-   member may list teams). If product requires DEV-sees-only-own-teams,
-   tighten `teams_select_org_member` with a `team_members` predicate.
+4. **DEV team-visibility restriction (enforced, plan MEMB-04/RBAC-TEAM-01)**: team reads are NOT org-wide.
+   `teams_select_org_member` grants ADMIN/PROJECT_MANAGER full org visibility via
+   `smartsprint_is_org_staff(organization_id)`, while DEVELOPERs see only teams
+   with a `team_members` row for `auth.uid()` (plus org membership). Static
+   contract: `tests/database/rls.test.ts` ("teams SELECT restricts developers
+   to their own teams…") pins org-membership + `team_members` + `auth.uid()`
+   and zero `USING(true)`; live: `MEMB-04/live` pins zero foreign-team rows.
 5. **Drizzle meta journal**: `supabase/migrations/meta/_journal.json` and
    snapshots were intentionally left untouched (Drizzle does not model RLS;
    this is a custom SQL migration deployed via Supabase/psql). If the team
