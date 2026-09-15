@@ -651,12 +651,12 @@ describe.skipIf(!isLiveEnvConfigured())("governance (live behavioral)", () => {
     });
   });
 
-  it(`GOV-CHG-02/live (plan normative, variance V3): change-request self-decision denies ${formatCase(ACTORS.pmA, "UPDATE", "change_requests[self→approved]", "denied")}`, async (ctx) => {
+  it(`GOV-CHG-02/live: change-request self-decision denies (approve + reject) ${formatCase(ACTORS.pmA, "UPDATE", "change_requests[self→approved/rejected]", "denied")}`, async (ctx) => {
     await live(ctx, async () => {
-      // The migration's change_requests_update_staff lacks the approvals-style
-      // no-self-decide guard (static variance V3). The test plan (GOV-CHG-01,
-      // "same split as approvals") requires denial: if this fails live, the
-      // policy — not the test — needs the fix. Reported, not weakened.
+      // Enforced by change_requests_update_staff WITH CHECK
+      // (status='pending' OR requester_id IS DISTINCT FROM auth.uid()),
+      // approvals-parity per GOV-CHG-01: the requester cannot approve or
+      // reject their own request. Both decision directions are pinned below.
       await runAsUser(PM_A, async (client) => {
         const created = await client.query(
           "insert into public.change_requests (project_id, title, type, impact, status, requester_id) values ($1, 'RLS self-decide probe', 'feature', 'medium', 'pending', auth.uid()) returning id",
