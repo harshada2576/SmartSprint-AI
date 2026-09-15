@@ -669,7 +669,12 @@ describe.skipIf(!isLiveEnvConfigured())("governance (live behavioral)", () => {
           [id],
         );
         // Plan-normative expectation: the requester must not decide their own request.
-        expect(selfDecide.rowCount, "self-decision on change request must affect zero rows").toBe(0);
+        expect(selfDecide.rowCount, "self-approval on change request must affect zero rows").toBe(0);
+        const selfReject = await client.query(
+          "update public.change_requests set status = 'rejected', decided_at = now() where id = $1",
+          [id],
+        );
+        expect(selfReject.rowCount, "self-rejection on change request must affect zero rows").toBe(0);
       });
     });
   });
