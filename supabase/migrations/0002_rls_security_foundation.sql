@@ -338,7 +338,17 @@ CREATE POLICY users_update_admin ON public.users
 -- ---- teams ----
 DROP POLICY IF EXISTS teams_select_org_member ON public.teams;
 CREATE POLICY teams_select_org_member ON public.teams
-  FOR SELECT USING (public.smartsprint_is_org_member(organization_id));
+  FOR SELECT USING (
+    public.smartsprint_is_org_staff(organization_id)
+    OR (
+      public.smartsprint_is_org_member(organization_id)
+      AND EXISTS (
+        SELECT 1 FROM public.team_members tm
+        WHERE tm.team_id = teams.id
+        AND tm.user_id = auth.uid()
+      )
+    )
+  );
 
 DROP POLICY IF EXISTS teams_admin_insert ON public.teams;
 CREATE POLICY teams_admin_insert ON public.teams
@@ -981,7 +991,16 @@ DROP POLICY IF EXISTS change_requests_update_staff ON public.change_requests;
 CREATE POLICY change_requests_update_staff ON public.change_requests
   FOR UPDATE
   USING (public.smartsprint_is_org_staff(public.smartsprint_project_org(project_id)))
-  WITH CHECK (public.smartsprint_is_org_staff(public.smartsprint_project_org(project_id)));
+  WITH CHECK (
+    public.smartsprint_is_org_staff(public.smartsprint_project_org(project_id))
+    -- No self-decision (approvals parity): a staff requester may still edit
+    -- their own pending request, but approving/rejecting it requires a
+    -- different staff member. NULL-safe via IS DISTINCT FROM.
+    AND (
+      status = 'pending'::public.change_request_status
+      OR requester_id IS DISTINCT FROM auth.uid()
+    )
+  );
 
 DROP POLICY IF EXISTS change_requests_delete_admin ON public.change_requests;
 CREATE POLICY change_requests_delete_admin ON public.change_requests
