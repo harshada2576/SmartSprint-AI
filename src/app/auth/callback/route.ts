@@ -37,7 +37,9 @@ export async function GET(request: NextRequest) {
 
   // Recovery links land on /reset-password with a valid session; the user
   // sets the new password there, so no provisioning is needed first.
-  if (next.startsWith("/reset-password")) {
+  // Same internal-redirect guard as the final redirect below.
+  const isSafeInternal = next.startsWith("/") && !next.startsWith("//");
+  if (next.startsWith("/reset-password") && isSafeInternal) {
     return NextResponse.redirect(new URL(next, url.origin));
   }
 
@@ -63,6 +65,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const redirectTo = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  const redirectTo = isSafeInternal ? next : "/dashboard";
   return NextResponse.redirect(new URL(redirectTo, url.origin));
 }
