@@ -3,6 +3,7 @@ import type { RequestScope } from "@/types/api";
 import type { SprintsQuery } from "@/schemas/list-queries";
 import { toOffsetLimit } from "@/api/pagination";
 import { findAccessibleProjectById } from "@/repositories/project.repository";
+import { DbWriteError, toDbWriteError } from "@/repositories/mutation-helpers";
 
 /**
  * Sprint data access — scoped to the authenticated caller.
@@ -133,4 +134,109 @@ export async function listSprintsScoped(
     }
   }
   return { rows, total: count ?? rows.length };
+}
+
+// ---------------------------------------------------------------------------
+// Mutations (RLS-scoped writes — see `mutation-helpers.ts` for the model).
+// ---------------------------------------------------------------------------
+
+export interface SprintInsert {
+  project_id: string;
+  name: string;
+  goal?: string | null;
+  status?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  total_points?: number | null;
+  completed_points?: number | null;
+}
+
+export interface SprintPatch {
+  name?: string;
+  goal?: string | null;
+  status?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  total_points?: number | null;
+  completed_points?: number | null;
+}
+
+/**
+ * Full sprint row by id through the caller's RLS client, or `null` when
+ * missing/invisible (no existence oracle). Used to gate mutations.
+ */
+export async function findSprintRowById(
+  client: SupabaseClient,
+  sprintId: string,
+): Promise<SprintRow | null> {
+  const { data, error } = await client
+    .from("sprints")
+    .select("*")
+    .eq("id", sprintId)
+    .maybeSingle();
+  if (error) {
+    throw new DbWriteError("failed", "sprint_lookup_failed");
+  }
+  return toSprintRow(data);
+}
+
+/** Inserts one sprint through RLS. Throws `DbWriteError` on failure. */
+export async function insertSprint(
+  client: SupabaseClient,
+  row: SprintInsert,
+): Promise<SprintRow> {
+  const { data, error } = await client
+    .from("sprints")
+    .insert({
+      project_id: row.project_id,
+      name: row.name,
+      ...(row.goal !== undefined ? { goal: row.goal } : {}),
+      ...(row.status !== undefined ? { status: row.status } : {}),
+      ...(row.start_date !== undefined ? { start_date: row.start_date } : {}),
+      ...(row.end_date !== undefined ? { end_date: row.end_date } : {}),
+      ...(row.total_points !== undefined
+        ? { total_points: row.total_points }
+        : {}),
+      ...(row.completed_points !== undefined
+        ? { completed_points: row.completed_points }
+        : {}),
+    })
+    .select("*")
+    .single();
+  if (error) {
+    throw toDbWriteError(error, "sprint_insert_failed");
+  }
+  const created = toSprintRow(data);
+  if (!created) {
+    throw new DbWriteError("failed", "sprint_insert_failed");
+  }
+  return created;
+}
+
+/**
+ * Updates one sprint through RLS. Returns the updated row, or `null` when
+ * the row is not visible to the caller (missing or RLS-filtered — the
+ * service pre-verifies accessibility, so `null` here means a raced deny).
+ * Throws `DbWriteError` on policy/constraint failures.
+ */
+export async function updateSprintById(
+  client: SupabaseClient,
+  sprintId: string,
+  patch: SprintPatch,
+): Promise<SprintRow | null> {
+  const { data, error } = await client
+    .from("sprints")
+    .update({ ...patch })
+    .eq("id", sprintId)
+    .select("*")
+    .maybeSingle();
+  if (error) {
+    throw toDbWriteError(error, "sprint_update_failed");
+  }
+  if (data === null) return null;
+  const updated = toSprintRow(data);
+  if (!updated) {
+    throw new DbWriteError("failed", "sprint_update_failed");
+  }
+  return updated;
 }

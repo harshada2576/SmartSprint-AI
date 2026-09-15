@@ -5,6 +5,7 @@ import {
   escapeIlikeLiteral,
   toOffsetLimit,
 } from "@/api/pagination";
+import { DbWriteError, toDbWriteError } from "@/repositories/mutation-helpers";
 
 /**
  * Project data access — scoped to the authenticated caller.
@@ -142,4 +143,182 @@ export async function listProjectsScoped(
     }
   }
   return { rows, total: count ?? rows.length };
+}
+
+// ---------------------------------------------------------------------------
+// Mutations (RLS-scoped writes — see `mutation-helpers.ts` for the model).
+// ---------------------------------------------------------------------------
+
+export interface ProjectInsert {
+  organization_id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  client?: string | null;
+  manager_id?: string | null;
+  method?: string;
+  status?: string;
+  priority?: string;
+  progress?: number;
+  start_date?: string | null;
+  end_date?: string | null;
+  budget_total?: string | null;
+  budget_currency?: string;
+}
+
+export interface ProjectPatch {
+  name?: string;
+  code?: string;
+  description?: string | null;
+  client?: string | null;
+  manager_id?: string | null;
+  method?: string;
+  status?: string;
+  priority?: string;
+  progress?: number;
+  start_date?: string | null;
+  end_date?: string | null;
+  budget_total?: string | null;
+  budget_currency?: string;
+}
+
+/**
+ * Full project row by id through the caller's RLS client, or `null` when
+ * missing/invisible (no existence oracle). Used to gate mutations.
+ */
+export async function findProjectRowById(
+  client: SupabaseClient,
+  projectId: string,
+): Promise<ProjectRow | null> {
+  const { data, error } = await client
+    .from("projects")
+    .select("*")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (error) {
+    throw new DbWriteError("failed", "project_lookup_failed");
+  }
+  return toProjectRow(data);
+}
+
+/**
+ * True when `code` is already taken in `orgId` (optionally ignoring one
+ * project — for updates). Case-sensitive, matching the
+ * `UNIQUE(organization_id, code)` index semantics.
+ */
+export async function isProjectCodeTaken(
+  client: SupabaseClient,
+  orgId: string,
+  code: string,
+  excludeId?: string,
+): Promise<boolean> {
+  let query = client
+    .from("projects")
+    .select("id")
+    .eq("organization_id", orgId)
+    .eq("code", code)
+    .limit(1);
+  if (excludeId !== undefined) {
+    query = query.neq("id", excludeId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    throw new DbWriteError("failed", "project_code_lookup_failed");
+  }
+  return data !== null;
+}
+
+function codeBaseFromName(name: string): string {
+  const alnum = name.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (alnum.length < 2) return "PRJ";
+  return alnum.slice(0, 4);
+}
+
+/**
+ * Generates a per-org unique project code derived from the project name
+ * (e.g. "Aurora Customer Portal" → "AURO", then "AURO-2", …).
+ * The database unique index remains the final authority; callers still map
+ * `unique_violation` to a 400 for the raced corner.
+ */
+export async function generateProjectCode(
+  client: SupabaseClient,
+  orgId: string,
+  name: string,
+): Promise<string> {
+  const base = codeBaseFromName(name);
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const candidate =
+      attempt === 0 ? base : `${base.slice(0, 20 - String(attempt).length - 1)}-${attempt}`;
+    if (!(await isProjectCodeTaken(client, orgId, candidate))) {
+      return candidate;
+    }
+  }
+  throw new DbWriteError("failed", "project_code_generation_failed");
+}
+
+/** Inserts one project through RLS. Throws `DbWriteError` on failure. */
+export async function insertProject(
+  client: SupabaseClient,
+  row: ProjectInsert,
+): Promise<ProjectRow> {
+  const { data, error } = await client
+    .from("projects")
+    .insert({
+      organization_id: row.organization_id,
+      name: row.name,
+      code: row.code,
+      ...(row.description !== undefined ? { description: row.description } : {}),
+      ...(row.client !== undefined ? { client: row.client } : {}),
+      ...(row.manager_id !== undefined ? { manager_id: row.manager_id } : {}),
+      ...(row.method !== undefined ? { method: row.method } : {}),
+      ...(row.status !== undefined ? { status: row.status } : {}),
+      ...(row.priority !== undefined ? { priority: row.priority } : {}),
+      ...(row.progress !== undefined ? { progress: row.progress } : {}),
+      ...(row.start_date !== undefined ? { start_date: row.start_date } : {}),
+      ...(row.end_date !== undefined ? { end_date: row.end_date } : {}),
+      ...(row.budget_total !== undefined
+        ? { budget_total: row.budget_total }
+        : {}),
+      ...(row.budget_currency !== undefined
+        ? { budget_currency: row.budget_currency }
+        : {}),
+    })
+    .select("*")
+    .single();
+  if (error) {
+    throw toDbWriteError(error, "project_insert_failed");
+  }
+  const created = toProjectRow(data);
+  if (!created) {
+    throw new DbWriteError("failed", "project_insert_failed");
+  }
+  return created;
+}
+
+/**
+ * Updates one project through RLS. Returns the updated row, or `null` when
+ * the row is not visible to the caller (missing or RLS-filtered — the
+ * service pre-verifies accessibility, so `null` here means a raced deny).
+ * Throws `DbWriteError` on policy/constraint failures.
+ */
+export async function updateProjectById(
+  client: SupabaseClient,
+  projectId: string,
+  patch: ProjectPatch,
+): Promise<ProjectRow | null> {
+  const { data, error } = await client
+    .from("projects")
+    .update({ ...patch })
+    .eq("id", projectId)
+    .select("*")
+    .maybeSingle();
+  if (error) {
+    throw toDbWriteError(error, "project_update_failed");
+  }
+  if (data === null) return null;
+  const updated = toProjectRow(data);
+  if (!updated) {
+    throw new DbWriteError("failed", "project_update_failed");
+  }
+  return updated;
 }
