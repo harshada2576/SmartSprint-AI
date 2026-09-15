@@ -18,9 +18,13 @@
     "jsx": "react-jsx",
     "incremental": true,
     "baseUrl": ".",
+    "ignoreDeprecations": "5.0",
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@supabase/*": [
+        "./supabase/*"
       ]
     },
     "plugins": [

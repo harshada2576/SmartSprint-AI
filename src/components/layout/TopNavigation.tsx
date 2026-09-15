@@ -2,8 +2,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 import {
   Search,
   Bell,
@@ -24,8 +25,22 @@ interface TopNavigationProps {
 }
 
 export function TopNavigation({ isSidebarCollapsed }: TopNavigationProps) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showCommandPalette, setShowCommandPalette] = React.useState(false);
+  const [isSigningOut, setIsSigningOut] = React.useState(false);
+
+  const handleSignOut = React.useCallback(async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } finally {
+      router.push("/login");
+      router.refresh();
+    }
+  }, [router, isSigningOut]);
 
   // Keyboard shortcut for command palette
   React.useEffect(() => {
@@ -151,8 +166,13 @@ export function TopNavigation({ isSidebarCollapsed }: TopNavigationProps) {
                 Settings
               </DropdownItem>
               <DropdownSeparator />
-              <DropdownItem icon={<LogOut className="h-4 w-4" />} danger>
-                Sign Out
+              <DropdownItem
+                icon={<LogOut className="h-4 w-4" />}
+                danger
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+              >
+                {isSigningOut ? "Signing Out…" : "Sign Out"}
               </DropdownItem>
             </Dropdown>
           </div>

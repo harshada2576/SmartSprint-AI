@@ -1,0 +1,74 @@
+[
+  {
+    "id": "5ebfef14-1865-4b8e-8be8-b9d71234764e",
+    "organization_id": "382db5f8-3744-4915-8dca-59e55fce3229",
+    "name": "Quality Engineering",
+    "lead_id": "28853310-75fa-4d9d-9ef9-06f20a010fe2",
+    "created_at": "2025-05-05T21:21:05.000Z",
+    "updated_at": "2025-05-08T06:38:10.000Z"
+  },
+  {
+    "id": "283d2291-cf16-4a30-a2fa-0841d832836c",
+    "organization_id": "382db5f8-3744-4915-8dca-59e55fce3229",
+    "name": "Mobile Engineering",
+    "lead_id": "0793b5e3-d35b-4320-b970-9fc70b7dcd68",
+    "created_at": "2025-03-13T00:58:45.000Z",
+    "updated_at": "2025-03-19T11:53:57.000Z"
+  },
+  {
+    "id": "965f1ad5-f2b5-44f4-837a-86b4f7d751e8",
+    "organization_id": "382db5f8-3744-4915-8dca-59e55fce3229",
+    "name": "Customer Experience",
+    "lead_id": "0793b5e3-d35b-4320-b970-9fc70b7dcd68",
+    "created_at": "2025-03-30T02:07:09.000Z",
+    "updated_at": "2025-04-06T14:34:00.000Z"
+  },
+  {
+    "id": "e8525feb-d5f6-4e34-9b69-9344a68cb8f2",
+    "organization_id": "382db5f8-3744-4915-8dca-59e55fce3229",
+    "name": "Sprint Delivery",
+    "lead_id": "462fd273-1ab0-4595-b54d-88a0532a69e6",
+    "created_at": "2025-03-01T20:34:06.000Z",
+    "updated_at": "2025-03-08T01:38:48.000Z"
+  },
+  {
+    "id": "8d1ad20f-f0fd-4f03-81cf-f7a77d3fda4e",
+    "organization_id": "382db5f8-3744-4915-8dca-59e55fce3229",
+    "name": "Data Engineering",
+    "lead_id": "f69e52c1-862d-4c30-b7d7-0bc09eee1f11",
+    "created_at": "2025-05-31T15:22:51.000Z",
+    "updated_at": "2025-06-01T08:57:48.000Z"
+  },
+  {
+    "id": "6b422973-c6e7-44dc-a44c-a5942eeb397c",
+    "organization_id": "23b6b6c9-c0c0-42d7-9b32-a2e93292696a",
+    "name": "Design Systems",
+    "lead_id": "06d03d9d-6447-4f26-9e1b-0e02d83095b2",
+    "created_at": "2025-04-16T12:59:36.000Z",
+    "updated_at": "2025-04-17T20:46:58.000Z"
+  },
+  {
+    "id": "fe38264c-4055-433d-ac00-cebe3e044447",
+    "organization_id": "23b6b6c9-c0c0-42d7-9b32-a2e93292696a",
+    "name": "Infrastructure",
+    "lead_id": "33ad9765-fac6-4b64-9859-868f2c3bfe30",
+    "created_at": "2025-05-21T00:56:53.000Z",
+    "updated_at": "2025-05-29T19:58:22.000Z"
+  },
+  {
+    "id": "3ff998a2-f523-47f1-bd72-7ed5d49b4d34",
+    "organization_id": "716560fb-6bd4-4481-b5b7-07d68a9ad7c1",
+    "name": "Security Engineering",
+    "lead_id": "b3e2b253-f7c9-4370-8bb7-c4a1606a9377",
+    "created_at": "2025-03-27T05:15:07.000Z",
+    "updated_at": "2025-03-31T14:24:59.000Z"
+  },
+  {
+    "id": "844b9612-aad0-4e07-81c5-586400d455f3",
+    "organization_id": "716560fb-6bd4-4481-b5b7-07d68a9ad7c1",
+    "name": "Requirements & AI",
+    "lead_id": "b3e2b253-f7c9-4370-8bb7-c4a1606a9377",
+    "created_at": "2025-04-26T06:35:04.000Z",
+    "updated_at": "2025-05-06T03:31:13.000Z"
+  }
+]

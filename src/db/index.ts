@@ -8,17 +8,20 @@ if (!databaseUrl) {
 }
 
 const globalForDb = globalThis as typeof globalThis & {
-  __arenaNextJsPostgresqlPool?: Pool;
+  __smartSprintPgPool?: Pool;
 };
 
 export const pool =
-  globalForDb.__arenaNextJsPostgresqlPool ??
+  globalForDb.__smartSprintPgPool ??
   new Pool({
     connectionString: databaseUrl,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForDb.__arenaNextJsPostgresqlPool = pool;
+  globalForDb.__smartSprintPgPool = pool;
 }
 
 export const db = drizzle(pool);
