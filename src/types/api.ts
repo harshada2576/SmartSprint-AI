@@ -76,3 +76,13 @@ export interface ApiSuccessResponse<T> {
   data: T;
   pagination?: PaginationMeta;
 }
+
+/**
+ * Paginated collection result returned by repositories for list endpoints.
+ * `pagination` always carries the full `PaginationMeta` (page, pageSize,
+ * total, totalPages) so every collection shares one response shape.
+ */
+export interface PaginatedResult<T> {
+  items: T[];
+  pagination: PaginationMeta;
+}

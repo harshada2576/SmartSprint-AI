@@ -1,5 +1,6 @@
 import type { ApiErrorDetail } from "@/types/api";
-import { parsePagination } from "@/utils/api-response";
+import { parsePaginationParams } from "@/api/pagination";
+import { MAX_SEARCH_LENGTH, isUuid } from "./query-params";
 
 /**
  * Query-parameter validation for the authenticated list endpoints.
@@ -18,13 +19,6 @@ import { parsePagination } from "@/utils/api-response";
  * - Enum sets mirror the Postgres enums in `supabase/schema.ts` exactly
  *   (case-sensitive).
  */
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isUuid(value: string): boolean {
-  return UUID_RE.test(value);
-}
 
 export const PROJECT_STATUSES = [
   "active",
@@ -64,8 +58,6 @@ export const TASK_STATUSES = [
 ] as const;
 
 export const TASK_PRIORITIES = ["high", "medium", "low"] as const;
-
-const MAX_SEARCH_LENGTH = 200;
 
 export interface PagedQuery {
   page: number;
@@ -181,7 +173,7 @@ function withPagination<T>(
   details: ApiErrorDetail[],
   build: (paged: PagedQuery) => T,
 ): QueryParseResult<T> {
-  const pagination = parsePagination(searchParams);
+  const pagination = parsePaginationParams(searchParams);
   if (!pagination.ok) {
     details.push(...pagination.details);
   }
