@@ -106,10 +106,13 @@ verified `user_id` before creating anything:
   clean.
 
 Safe under: callback refresh/retry, double-POST, network retry, OAuth retry.
-Limitation: two **concurrent** first-time POSTs could both pass the
-membership check before either inserts (no DB-level idempotency key links an
-auth identity to a single bootstrap org). The window is tiny and retries
-converge; see §7 for the optional Database-agent hardening.
+Concurrent first-time POSTs are reconciled in code
+(`provision-server.ts` steps 5–6): on membership-insert conflict the winner's
+existing membership is returned; post-insert, the earliest membership wins
+and a just-created loser org is best-effort deleted. No DB-level idempotency
+key links an auth identity to a single bootstrap org, so a brief duplicate-org
+window remains under true simultaneity; see §7 for the optional
+Database-agent hardening (partial unique index / advisory lock).
 
 Seeded users: if `public.users.email` already maps to a **different** id,
 provisioning throws `account_exists` and never merges or re-owns rows. Fresh
