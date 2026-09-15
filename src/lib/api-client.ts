@@ -262,6 +262,47 @@ export async function fetchCollection<T>(
 }
 
 /**
+ * POSTs a JSON body to an endpoint. Only the fields the backend accepts are
+ * ever sent; failures throw `ApiError`.
+ */
+export async function postJson<T>(
+  endpoint: string,
+  body: Record<string, unknown>,
+  normalize: Normalizer<T>,
+  options?: { signal?: AbortSignal; fallback?: string },
+): Promise<T | null> {
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify(body),
+      signal: options?.signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError")
+      throw error;
+    throw new ApiError(
+      "NETWORK_ERROR",
+      "Could not reach the server. Check your connection and try again.",
+    );
+  }
+  const payload = await parseJson(response);
+  if (!response.ok) throwForStatus(response, payload, options?.fallback ?? "Create failed");
+  if (!isRecord(payload) || payload.success !== true) {
+    const parsed = payload !== null ? readErrorPayload(payload) : null;
+    throw new ApiError(
+      parsed?.code ?? "INTERNAL_ERROR",
+      parsed?.message ?? "The server returned an unexpected response.",
+      response.status,
+    );
+  }
+  return normalize(payload.data);
+}
+
+/**
  * PATCHes a resource (used for notification read-state). Only the fields the
  * backend accepts are ever sent; failures throw `ApiError`.
  */
