@@ -4,7 +4,7 @@ import type { RequirementsQuery } from "@/schemas/list-queries";
 import {
   escapeIlikeLiteral,
   toOffsetLimit,
-} from "@/utils/api-response";
+} from "@/api/pagination";
 import { findAccessibleProjectById } from "@/repositories/project.repository";
 import { findAccessibleSprintById } from "@/repositories/sprint.repository";
 

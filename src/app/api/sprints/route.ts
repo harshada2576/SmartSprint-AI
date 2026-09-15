@@ -6,12 +6,12 @@ import {
 import { parseSprintsQuery } from "@/schemas/list-queries";
 import { listSprints } from "@/services/sprint.service";
 import {
-  buildPaginationMeta,
-  internalError,
-  notFound,
-  success,
-  validationError,
-} from "@/utils/api-response";
+  internalErrorResponse,
+  notFoundResponse,
+  successResponse,
+  validationErrorResponse,
+} from "@/api/response";
+import { buildPaginationMeta } from "@/api/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     auth = await requireAuthenticatedContext(request);
   } catch (error) {
     console.error("GET /api/sprints auth failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
   if (!auth.ok) {
     return auth.response;
@@ -43,22 +43,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     scope = await resolveRequestScope(context.supabase, context.user.id);
   } catch (error) {
     console.error("GET /api/sprints scope failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 
   const parsed = parseSprintsQuery(request.nextUrl.searchParams);
   if (!parsed.ok) {
-    return validationError(parsed.details);
+    return validationErrorResponse(parsed.details);
   }
 
   try {
     const result = await listSprints(context.supabase, scope, parsed.value);
     if (result === null) {
-      return notFound("Project not found");
+      return notFoundResponse("Project not found");
     }
-    return success(result.rows, buildPaginationMeta(parsed.value, result.total));
+    return successResponse(result.rows, {
+      pagination: buildPaginationMeta(parsed.value, result.total),
+    });
   } catch (error) {
     console.error("GET /api/sprints failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 }

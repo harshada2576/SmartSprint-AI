@@ -4,7 +4,7 @@ import type { ProjectsQuery } from "@/schemas/list-queries";
 import {
   escapeIlikeLiteral,
   toOffsetLimit,
-} from "@/utils/api-response";
+} from "@/api/pagination";
 
 /**
  * Project data access — scoped to the authenticated caller.

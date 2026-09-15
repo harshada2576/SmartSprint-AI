@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RequestScope } from "@/types/api";
 import type { TasksQuery } from "@/schemas/list-queries";
-import { toOffsetLimit } from "@/utils/api-response";
+import { toOffsetLimit } from "@/api/pagination";
 import { findAccessibleProjectById } from "@/repositories/project.repository";
 import { findAccessibleSprintById } from "@/repositories/sprint.repository";
 

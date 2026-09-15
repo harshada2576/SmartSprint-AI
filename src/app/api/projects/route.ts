@@ -6,11 +6,11 @@ import {
 import { parseProjectsQuery } from "@/schemas/list-queries";
 import { listProjects } from "@/services/project.service";
 import {
-  buildPaginationMeta,
-  internalError,
-  success,
-  validationError,
-} from "@/utils/api-response";
+  internalErrorResponse,
+  successResponse,
+  validationErrorResponse,
+} from "@/api/response";
+import { buildPaginationMeta } from "@/api/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     auth = await requireAuthenticatedContext(request);
   } catch (error) {
     console.error("GET /api/projects auth failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
   if (!auth.ok) {
     return auth.response;
@@ -42,12 +42,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     scope = await resolveRequestScope(context.supabase, context.user.id);
   } catch (error) {
     console.error("GET /api/projects scope failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 
   const parsed = parseProjectsQuery(request.nextUrl.searchParams);
   if (!parsed.ok) {
-    return validationError(parsed.details);
+    return validationErrorResponse(parsed.details);
   }
 
   try {
@@ -56,9 +56,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       scope,
       parsed.value,
     );
-    return success(rows, buildPaginationMeta(parsed.value, total));
+    return successResponse(rows, {
+      pagination: buildPaginationMeta(parsed.value, total),
+    });
   } catch (error) {
     console.error("GET /api/projects failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 }

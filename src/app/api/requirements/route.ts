@@ -6,12 +6,12 @@ import {
 import { parseRequirementsQuery } from "@/schemas/list-queries";
 import { listRequirements } from "@/services/requirement.service";
 import {
-  buildPaginationMeta,
-  internalError,
-  notFound,
-  success,
-  validationError,
-} from "@/utils/api-response";
+  internalErrorResponse,
+  notFoundResponse,
+  successResponse,
+  validationErrorResponse,
+} from "@/api/response";
+import { buildPaginationMeta } from "@/api/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     auth = await requireAuthenticatedContext(request);
   } catch (error) {
     console.error("GET /api/requirements auth failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
   if (!auth.ok) {
     return auth.response;
@@ -45,12 +45,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     scope = await resolveRequestScope(context.supabase, context.user.id);
   } catch (error) {
     console.error("GET /api/requirements scope failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 
   const parsed = parseRequirementsQuery(request.nextUrl.searchParams);
   if (!parsed.ok) {
-    return validationError(parsed.details);
+    return validationErrorResponse(parsed.details);
   }
 
   try {
@@ -60,11 +60,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       parsed.value,
     );
     if (result === null) {
-      return notFound("Project not found");
+      return notFoundResponse("Project not found");
     }
-    return success(result.rows, buildPaginationMeta(parsed.value, result.total));
+    return successResponse(result.rows, {
+      pagination: buildPaginationMeta(parsed.value, result.total),
+    });
   } catch (error) {
     console.error("GET /api/requirements failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 }
