@@ -274,6 +274,12 @@ never browser code), re-validating membership/role before acting:
 - `ai_predictions` creation (AI pipeline); notification generation.
 - Signup profile bootstrap (`auth.users` → `public.users` with `id = auth.uid()`)
   if the trigger path is chosen; account deactivation/deletion flows.
+- **Concurrent signup race**: due to the absence of an auth→public users trigger,
+  the application must handle profile creation atomically. The `users_email_key`
+  unique constraint prevents duplicate emails, and the
+  `users_insert_self`/`users_update_self` policies enforce owner-only writes.
+  Serverside: use `INSERT ... ON CONFLICT (email) DO NOTHING` or an Edge Function
+  to make signup idempotent and race-safe.
 - Any PM-delete or cross-project move workflows from §9 if product approves
   them (keep denied in RLS; audit in the lane).
 - **Privileged-pool warning**: the existing Drizzle `pg.Pool` over
