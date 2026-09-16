@@ -76,8 +76,12 @@ export default function BacklogPage() {
           { label: "Product Backlog" },
         ]}
         primaryAction={{
+          // No POST /api/backlog endpoint exists: backlog rows are derived
+          // from requirements server-side, so creation honestly routes to
+          // the requirement creation flow whose approved requirements
+          // appear here.
           label: "Add Item",
-          onClick: () => {},
+          onClick: () => router.push("/requirements/create"),
         }}
         secondaryActions={[
           {

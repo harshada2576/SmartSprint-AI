@@ -332,7 +332,12 @@ export default function NotificationsPage() {
                 {/* Clear (delete) is intentionally unwired: no DELETE
                     /api/notifications endpoint exists, so deletion must not
                     be faked. Kept visually consistent; see integration report. */}
-                <Button variant="ghost" size="sm" leftIcon={<Trash2 className="h-4 w-4" />}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<Trash2 className="h-4 w-4" />}
+                  title="Delete is unavailable: no DELETE /api/notifications endpoint exists"
+                >
                   Clear
                 </Button>
               </div>

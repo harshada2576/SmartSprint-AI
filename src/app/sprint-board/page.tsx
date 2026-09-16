@@ -27,13 +27,16 @@ import {
   AlertCircle,
 } from "lucide-react";
 import {
+  ApiError,
   buildQuery,
   normalizeSprint,
   normalizeTask,
+  patchJson,
   useCollection,
   type SprintItem,
   type TaskItem,
 } from "@/lib/api-client";
+import { Select } from "@/components/ui/Select";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
 
 const SPRINTS_PAGE_SIZE = 50;
@@ -50,6 +53,11 @@ const COLUMNS = [
   { id: "testing", title: "Testing" },
   { id: "done", title: "Done" },
 ];
+
+const MOVE_OPTIONS = COLUMNS.map((column) => ({
+  value: column.id,
+  label: column.title,
+}));
 
 function formatSprintDate(value: string | null): string {
   if (!value) return "—";
@@ -131,9 +139,85 @@ export default function SprintBoardPage() {
     retry: retryTasks,
   } = useCollection<TaskItem>("/api/tasks", normalizeTask, tasksQuery);
 
-  const boardTasks = selectedSprint ? tasks : [];
+  // Optimistic status overrides: applied instantly on move, dropped on
+  // failure (rollback) or once the refetch confirms the server value.
+  const [statusOverrides, setStatusOverrides] = React.useState<
+    Record<string, string>
+  >({});
+  const [movingIds, setMovingIds] = React.useState<Record<string, boolean>>(
+    {},
+  );
+  const [moveError, setMoveError] = React.useState<string | null>(null);
+
+  const boardTasks = selectedSprint
+    ? tasks.map((task) =>
+        statusOverrides[task.id] !== undefined
+          ? { ...task, columnStatus: statusOverrides[task.id] as string }
+          : task,
+      )
+    : [];
   const countFor = (columnId: string): number =>
     boardTasks.filter((task) => task.columnStatus === columnId).length;
+
+  // Drop overrides the backend has confirmed so the server stays the source
+  // of truth after every refetch.
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- guarded updater: returns prev unless a server-confirmed override exists
+    setStatusOverrides((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const task of tasks) {
+        if (next[task.id] === task.columnStatus) {
+          delete next[task.id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [tasks]);
+
+  const moveTaskStatus = React.useCallback(
+    async (taskId: string, newStatus: string) => {
+      const current =
+        tasks.find((task) => task.id === taskId)?.columnStatus ?? null;
+      if (current === null || current === newStatus) return;
+      setMoveError(null);
+      setMovingIds((prev) => ({ ...prev, [taskId]: true }));
+      setStatusOverrides((prev) => ({ ...prev, [taskId]: newStatus }));
+      try {
+        // `status` is the backend-accepted alias for `column_status`.
+        await patchJson(
+          `/api/tasks/${taskId}`,
+          { status: newStatus },
+          normalizeTask,
+          { fallback: "Could not move task" },
+        );
+        retryTasks();
+      } catch (error: unknown) {
+        // Rollback the optimistic move, then reconcile with the backend.
+        // Authorization failures (e.g. moving a task assigned to someone
+        // else) arrive here verbatim — never hidden or bypassed.
+        setStatusOverrides((prev) => {
+          const next = { ...prev };
+          delete next[taskId];
+          return next;
+        });
+        setMoveError(
+          error instanceof ApiError
+            ? error.message
+            : "Could not move task. The board was refreshed to match the server.",
+        );
+        retryTasks();
+      } finally {
+        setMovingIds((prev) => {
+          const next = { ...prev };
+          delete next[taskId];
+          return next;
+        });
+      }
+    },
+    [tasks, retryTasks],
+  );
 
   const showSprintsLoading = sprintsLoading && sprints.length === 0;
   const showTasksLoading =
@@ -358,6 +442,22 @@ export default function SprintBoardPage() {
         </div>
       </div>
 
+      {moveError !== null ? (
+        <div
+          role="alert"
+          className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-700"
+        >
+          <span>{moveError}</span>
+          <button
+            type="button"
+            className="font-medium underline"
+            onClick={() => setMoveError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
       {showTasksLoading ? (
         <div className="flex gap-4 overflow-x-auto pb-4">
           {[0, 1, 2].map((index) => (
@@ -403,7 +503,17 @@ export default function SprintBoardPage() {
                     {countFor(column.id)}
                   </Badge>
                 </div>
-                <Button variant="ghost" size="icon-sm">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Add task to ${column.title}`}
+                  title={`Add task to ${column.title}`}
+                  onClick={() =>
+                    router.push(
+                      `/tasks?create=1&sprintId=${encodeURIComponent(selectedSprint.id)}&status=${encodeURIComponent(column.id)}`,
+                    )
+                  }
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
@@ -429,6 +539,22 @@ export default function SprintBoardPage() {
                         <div className="h-6 w-6 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
                           {assigneeInitials(task.assigneeId)}
                         </div>
+                      </div>
+                      <div
+                        className="mt-2 flex items-center gap-2"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <span className="text-xs text-slate-500">Move to</span>
+                        <Select
+                          aria-label={`Move ${task.title} to status`}
+                          options={MOVE_OPTIONS}
+                          value={task.columnStatus}
+                          disabled={movingIds[task.id] === true}
+                          onChange={(event) => {
+                            void moveTaskStatus(task.id, event.target.value);
+                          }}
+                          className="h-8 text-xs"
+                        />
                       </div>
                     </div>
                   ))}

@@ -294,7 +294,7 @@ export default function DashboardPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-4">
               <CardTitle>Recent Projects</CardTitle>
-              <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="h-4 w-4" />}>
+              <Button variant="ghost" size="sm" rightIcon={<ArrowRight className="h-4 w-4" />} onClick={() => router.push("/projects")}>
                 View All
               </Button>
             </CardHeader>

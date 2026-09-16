@@ -120,7 +120,7 @@ export default function AIRecommendationsPage() {
           title="No recommendations available"
           description="Run AI analysis after validating project requirements to get intelligent prioritization recommendations."
           action={{
-            label: "Run Analysis",
+            label: "Refresh",
             onClick: retry,
           }}
         />
@@ -446,11 +446,16 @@ export default function AIRecommendationsPage() {
                   <h4 className="text-sm font-medium text-slate-900 mb-3">
                     Manager Decision
                   </h4>
+                  {/* No accept/modify/reject endpoint exists yet (Step 10 AI
+                      work has not started): the actions stay disabled rather
+                      than faking a decision. */}
                   <div className="grid grid-cols-3 gap-2">
                     <Button
                       variant="secondary"
                       className="justify-center"
                       leftIcon={<CheckCircle className="h-4 w-4" />}
+                      disabled
+                      title="Accept is unavailable: no decision endpoint exists yet"
                     >
                       Accept
                     </Button>
@@ -458,6 +463,8 @@ export default function AIRecommendationsPage() {
                       variant="secondary"
                       className="justify-center"
                       leftIcon={<Edit3 className="h-4 w-4" />}
+                      disabled
+                      title="Modify is unavailable: no decision endpoint exists yet"
                     >
                       Modify
                     </Button>
@@ -465,10 +472,16 @@ export default function AIRecommendationsPage() {
                       variant="secondary"
                       className="justify-center"
                       leftIcon={<XCircle className="h-4 w-4" />}
+                      disabled
+                      title="Reject is unavailable: no decision endpoint exists yet"
                     >
                       Reject
                     </Button>
                   </div>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Decision actions need a backend endpoint that does not
+                    exist yet.
+                  </p>
                 </div>
               </CardContent>
             </Card>

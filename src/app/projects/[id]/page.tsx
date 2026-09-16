@@ -1,100 +1,347 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { AuthenticatedLayout } from "@/components/layout/AuthenticatedLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
-import { Progress } from "@/components/ui/Progress";
-import { StatusChip, PriorityChip } from "@/components/ui/StatusChip";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/Table";
+import { StatusChip } from "@/components/ui/StatusChip";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   ArrowLeft,
-  Edit,
-  FileText,
-  Sparkles,
-  Calendar,
-  Users,
-  Clock,
   AlertCircle,
-  CheckCircle,
-  MoreHorizontal,
-  FolderOpen,
-  Target,
+  Calendar,
+  FileText,
+  FolderKanban,
+  Sparkles,
   TrendingUp,
-  Activity,
+  Users,
+  Wallet,
 } from "lucide-react";
+import {
+  ApiError,
+  normalizeProject,
+  shortId,
+  type ProjectItem,
+} from "@/lib/api-client";
+import { formatDate, formatRelativeTime } from "@/lib/utils";
 
-// Mock project data
-const project = {
-  id: 1,
-  name: "E-Commerce Platform Redesign",
-  code: "ECOM-2025",
-  client: "RetailCorp Inc.",
-  status: "active",
-  progress: 65,
-  sprint: "Sprint 4",
-  sprintProgress: 72,
-  description:
-    "Complete redesign of the e-commerce platform with modern UI/UX, improved performance, and mobile-first approach.",
-  manager: "John Smith",
-  startDate: "2025-01-15",
-  endDate: "2025-09-15",
-  team: 8,
-  methodology: "Scrum",
-  priority: "high",
-};
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const stats = [
-  { label: "Progress", value: "65%", icon: TrendingUp, color: "blue" },
-  { label: "Current Sprint", value: "Sprint 4", icon: Target, color: "violet" },
-  { label: "Requirements", value: "42/65", icon: FileText, color: "emerald" },
-  { label: "Budget", value: "$145K/$200K", icon: Activity, color: "amber" },
-];
+interface DetailProject extends ProjectItem {
+  description: string | null;
+  budgetTotal: string | null;
+  budgetCurrency: string | null;
+}
 
-const actionableItems = [
-  { id: 1, type: "requirement", title: "3 requirements awaiting review", icon: FileText, action: "Review Now" },
-  { id: 2, type: "approval", title: "2 pending approvals", icon: CheckCircle, action: "View" },
-  { id: 3, type: "sprint", title: "Sprint planning for Sprint 5", icon: Calendar, action: "Plan Sprint" },
-  { id: 4, type: "document", title: "SRS document needs update", icon: FolderOpen, action: "Update" },
-];
+function toNullableText(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
 
-const timeline = [
-  { stage: "Initiation", status: "completed", date: "Jan 15" },
-  { stage: "Requirements", status: "completed", date: "Feb 28" },
-  { stage: "Design", status: "completed", date: "Mar 30" },
-  { stage: "Development", status: "current", date: "In Progress" },
-  { stage: "Testing", status: "pending", date: "Aug 01" },
-  { stage: "Deployment", status: "pending", date: "Sep 15" },
-];
+/**
+ * Extends the shared `normalizeProject` with the extra full-row columns the
+ * detail endpoint returns (description, budget_total, budget_currency).
+ * Nothing is invented — absent columns stay null.
+ */
+function normalizeDetailProject(value: unknown): DetailProject | null {
+  const base = normalizeProject(value);
+  if (base === null) return null;
+  if (typeof value !== "object" || value === null) return null;
+  const row = value as Record<string, unknown>;
+  return {
+    ...base,
+    description: toNullableText(row.description),
+    budgetTotal: toNullableText(row.budget_total),
+    budgetCurrency: toNullableText(row.budget_currency),
+  };
+}
 
-const upcomingDeadlines = [
-  { id: 1, title: "Sprint 4 Review", date: "2025-07-25", type: "sprint" },
-  { id: 2, title: "UI Mockups Approval", date: "2025-07-28", type: "approval" },
-  { id: 3, title: "Payment Gateway Integration", date: "2025-08-05", type: "milestone" },
-  { id: 4, title: "Client Demo", date: "2025-08-10", type: "milestone" },
-];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
-const recentActivity = [
-  { id: 1, action: "Requirement approved", item: "User Authentication", user: "John Smith", time: "2 hours ago" },
-  { id: 2, action: "Sprint updated", item: "Sprint 4", user: "Sarah Chen", time: "4 hours ago" },
-  { id: 3, action: "Document uploaded", item: "API Specification v2.1", user: "Mike Johnson", time: "6 hours ago" },
-  { id: 4, action: "Task completed", item: "Database Schema Design", user: "Emily Davis", time: "Yesterday" },
-  { id: 5, action: "Comment added", item: "Checkout Flow", user: "David Wilson", time: "Yesterday" },
-];
+async function fetchProjectById(
+  id: string,
+  signal: AbortSignal,
+): Promise<DetailProject> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/projects/${id}`, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError(
+      "NETWORK_ERROR",
+      "Could not reach the server. Check your connection and try again.",
+    );
+  }
+  let payload: unknown = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    const message =
+      isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string"
+        ? payload.error.message
+        : `Could not load project (HTTP ${response.status}).`;
+    if (response.status === 401) {
+      throw new ApiError("UNAUTHENTICATED", message, 401);
+    }
+    if (response.status === 404) {
+      throw new ApiError("NOT_FOUND", "Project not found.", 404);
+    }
+    throw new ApiError("INTERNAL_ERROR", message, response.status);
+  }
+  if (!isRecord(payload) || payload.success !== true) {
+    throw new ApiError(
+      "INTERNAL_ERROR",
+      "The server returned an unexpected response.",
+      response.status,
+    );
+  }
+  const project = normalizeDetailProject(payload.data);
+  if (project === null) {
+    throw new ApiError(
+      "INTERNAL_ERROR",
+      "The server returned an unexpected response.",
+      response.status,
+    );
+  }
+  return project;
+}
 
-export default function ProjectCommandCenterPage({ params }: { params: { id: string } }) {
+function readRouteId(params: unknown): string {
+  if (typeof params !== "object" || params === null) return "";
+  const id = (params as Record<string, unknown>).id;
+  if (typeof id === "string") return id;
+  if (Array.isArray(id) && typeof id[0] === "string") return id[0];
+  return "";
+}
+
+function formatDay(value: string | null): string {
+  if (!value) return "—";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return formatDate(value);
+}
+
+function formatTimestamp(value: string): string {
+  if (!value) return "—";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return formatRelativeTime(value);
+}
+
+type LoadState = "loading" | "load-error" | "not-found" | "ready";
+
+export default function ProjectCommandCenterPage() {
   const router = useRouter();
+  const routeParams = useParams();
+  const routeId = readRouteId(routeParams);
+
+  const [attempt, setAttempt] = React.useState(0);
+  const requestKey = `${routeId}:${attempt}`;
+  const [snapshot, setSnapshot] = React.useState<{
+    key: string;
+    project: DetailProject | null;
+    error: ApiError | null;
+  } | null>(null);
+
+  const isInvalidId = routeId !== "" && !UUID_RE.test(routeId);
+
+  React.useEffect(() => {
+    if (routeId === "" || isInvalidId) return;
+    let cancelled = false;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const project = await fetchProjectById(routeId, controller.signal);
+        if (cancelled) return;
+        setSnapshot({ key: requestKey, project, error: null });
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (error instanceof ApiError && (error.code === "NOT_FOUND" || error.status === 404)) {
+          setSnapshot({ key: requestKey, project: null, error: null });
+          return;
+        }
+        setSnapshot({
+          key: requestKey,
+          project: null,
+          error:
+            error instanceof ApiError
+              ? error
+              : new ApiError("INTERNAL_ERROR", "Something went wrong loading the project."),
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+    // `requestKey` fully describes the request; `attempt` is folded into it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeId, requestKey]);
+
+  const current = snapshot !== null && snapshot.key === requestKey ? snapshot : null;
+  const loadState: LoadState =
+    current === null
+      ? "loading"
+      : current.error !== null
+        ? "load-error"
+        : current.project === null
+          ? "not-found"
+          : "ready";
+  const project = current?.project ?? null;
+  const loadError = current?.error ?? null;
+  const editHref = routeId !== "" ? `/projects/${routeId}/edit` : "/projects";
+
+  if (routeId === "" || isInvalidId) {
+    return (
+      <AuthenticatedLayout>
+        <button
+          onClick={() => router.push("/projects")}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 mb-4 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Projects
+        </button>
+        <PageHeader
+          title="Project Not Found"
+          description="The project id in the URL is not a valid identifier."
+          breadcrumb={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Projects", href: "/projects" },
+            { label: "Not found" },
+          ]}
+        />
+        <EmptyState
+          icon={AlertCircle}
+          title="Invalid project id"
+          description="The project id in the URL must be a valid UUID."
+          action={{ label: "Back to Projects", onClick: () => router.push("/projects") }}
+        />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (loadState === "loading") {
+    return (
+      <AuthenticatedLayout>
+        <button
+          onClick={() => router.push("/projects")}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 mb-4 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Projects
+        </button>
+        <PageHeader
+          title="Project"
+          description="Loading project details…"
+          breadcrumb={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Projects", href: "/projects" },
+            { label: "Detail" },
+          ]}
+        />
+        <div className="space-y-3">
+          <Skeleton className="h-10 w-2/3" />
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (loadState === "load-error") {
+    return (
+      <AuthenticatedLayout>
+        <button
+          onClick={() => router.push("/projects")}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 mb-4 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Projects
+        </button>
+        <PageHeader
+          title="Project"
+          description="Could not load project details."
+          breadcrumb={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Projects", href: "/projects" },
+            { label: "Detail" },
+          ]}
+        />
+        <EmptyState
+          icon={AlertCircle}
+          title="Couldn't load project"
+          description={loadError?.message ?? "Something went wrong loading the project."}
+          action={{ label: "Try again", onClick: () => setAttempt((count) => count + 1) }}
+          secondaryAction={{ label: "Back to Projects", onClick: () => router.push("/projects") }}
+        />
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (loadState === "not-found" || project === null) {
+    return (
+      <AuthenticatedLayout>
+        <button
+          onClick={() => router.push("/projects")}
+          className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-900 mb-4 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Projects
+        </button>
+        <PageHeader
+          title="Project Not Found"
+          description="No accessible project matches this ID."
+          breadcrumb={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Projects", href: "/projects" },
+            { label: "Not found" },
+          ]}
+        />
+        <EmptyState
+          icon={FolderKanban}
+          title="Project not found"
+          description="This project does not exist or you do not have access to it."
+          action={{ label: "Back to Projects", onClick: () => router.push("/projects") }}
+          secondaryAction={{ label: "Try again", onClick: () => setAttempt((count) => count + 1) }}
+        />
+      </AuthenticatedLayout>
+    );
+  }
+
+  const headerMeta = [project.code, project.client].filter(
+    (part): part is string => typeof part === "string" && part.length > 0,
+  );
+
+  const stats = [
+    { label: "Progress", value: `${project.progress}%`, icon: TrendingUp },
+    {
+      label: "Budget",
+      value:
+        project.budgetTotal !== null
+          ? `${project.budgetTotal}${project.budgetCurrency ? ` ${project.budgetCurrency}` : ""}`
+          : "—",
+      icon: Wallet,
+    },
+    { label: "Start", value: formatDay(project.startDate), icon: Calendar },
+    { label: "End", value: formatDay(project.endDate), icon: Calendar },
+  ];
 
   return (
     <AuthenticatedLayout>
@@ -109,7 +356,7 @@ export default function ProjectCommandCenterPage({ params }: { params: { id: str
 
       <PageHeader
         title={project.name}
-        description={`${project.code} • ${project.client}`}
+        description={headerMeta.length > 0 ? headerMeta.join(" • ") : "Project details"}
         breadcrumb={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Projects", href: "/projects" },
@@ -117,20 +364,22 @@ export default function ProjectCommandCenterPage({ params }: { params: { id: str
         ]}
         primaryAction={{
           label: "Edit Project",
-          onClick: () => {},
+          onClick: () => router.push(editHref),
         }}
         secondaryActions={[
           {
-            label: "View Documents",
-            onClick: () => router.push("/documents"),
+            label: "Back to Projects",
+            onClick: () => router.push("/projects"),
           },
         ]}
       >
         <div className="flex items-center gap-3 mt-4">
           <StatusChip status={project.status} />
-          <Badge variant="secondary" size="sm">
-            {project.methodology}
-          </Badge>
+          {project.method ? (
+            <Badge variant="secondary" size="sm">
+              {project.method}
+            </Badge>
+          ) : null}
           <Badge
             variant={project.priority === "high" ? "danger" : "default"}
             size="sm"
@@ -140,10 +389,10 @@ export default function ProjectCommandCenterPage({ params }: { params: { id: str
         </div>
       </PageHeader>
 
-      {/* Stats Grid */}
+      {/* Stats Grid — real API data only */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
+        {stats.map((stat) => (
+          <Card key={stat.label}>
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center">
@@ -164,114 +413,108 @@ export default function ProjectCommandCenterPage({ params }: { params: { id: str
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Continue Working */}
+          {/* About */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Continue Working</CardTitle>
-              <CardDescription>Action items requiring your attention</CardDescription>
+              <CardTitle className="text-base">About</CardTitle>
+              <CardDescription>Project description</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid sm:grid-cols-2 gap-3">
-                {actionableItems.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center">
-                        <item.icon className="h-4 w-4 text-slate-600" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700">
-                        {item.title}
-                      </span>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                      {item.action}
-                    </Button>
-                  </div>
-                ))}
-              </div>
+              {project.description ? (
+                <p className="text-sm text-slate-600">{project.description}</p>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No description has been added for this project yet.
+                </p>
+              )}
             </CardContent>
           </Card>
 
-          {/* SDLC Timeline */}
+          {/* Details */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Project Timeline</CardTitle>
+              <CardTitle className="text-base">Details</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between">
-                {timeline.map((stage, index) => (
-                  <div key={index} className="flex items-center">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
-                          stage.status === "completed"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : stage.status === "current"
-                            ? "bg-blue-100 text-blue-700 ring-2 ring-blue-500 ring-offset-2"
-                            : "bg-slate-100 text-slate-400"
-                        }`}
-                      >
-                        {index + 1}
-                      </div>
-                      <span
-                        className={`mt-2 text-xs font-medium ${
-                          stage.status === "current"
-                            ? "text-slate-900"
-                            : "text-slate-500"
-                        }`}
-                      >
-                        {stage.stage}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {stage.date}
-                      </span>
-                    </div>
-                    {index < timeline.length - 1 && (
-                      <div
-                        className={`w-12 h-0.5 mx-2 ${
-                          stage.status === "completed"
-                            ? "bg-emerald-300"
-                            : "bg-slate-200"
-                        }`}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Code</dt>
+                  <dd className="text-slate-900">{project.code ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Client</dt>
+                  <dd className="text-slate-900">{project.client ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Manager</dt>
+                  <dd className="text-slate-900">{shortId(project.managerId)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Method</dt>
+                  <dd className="text-slate-900">{project.method === "" ? "—" : project.method}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Status</dt>
+                  <dd className="text-slate-900">{project.status}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Priority</dt>
+                  <dd className="text-slate-900">{project.priority}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Start date</dt>
+                  <dd className="text-slate-900">{formatDay(project.startDate)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">End date</dt>
+                  <dd className="text-slate-900">{formatDay(project.endDate)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Updated</dt>
+                  <dd className="text-slate-900">{formatTimestamp(project.updatedAt)}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide text-slate-400">Created</dt>
+                  <dd className="text-slate-900">{formatTimestamp(project.createdAt)}</dd>
+                </div>
+              </dl>
             </CardContent>
           </Card>
 
-          {/* Recent Activity */}
+          {/* Requirements — no dedicated project-scoped endpoint is consumed
+              here, so show an honest empty state instead of invented rows. */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Recent Activity</CardTitle>
-              <Button variant="ghost" size="sm">
+              <CardTitle className="text-base">Requirements</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/requirements")}
+              >
                 View All
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex gap-3">
-                    <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      <Activity className="h-4 w-4 text-slate-500" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm">
-                        <span className="font-medium text-slate-900">
-                          {activity.action}
-                        </span>{" "}
-                        <span className="text-slate-600">{activity.item}</span>
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        {activity.user} • {activity.time}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <EmptyState
+                icon={FileText}
+                title="No requirement summary available"
+                description="Requirement totals for this project are not exposed by the project endpoint. Browse the full requirements list instead."
+                action={{ label: "View Requirements", onClick: () => router.push("/requirements") }}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Activity — no activity feed endpoint exists. */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Recent Activity</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyState
+                icon={FolderKanban}
+                title="No activity feed available"
+                description="There is no activity endpoint backing this view yet."
+              />
             </CardContent>
           </Card>
         </div>
@@ -312,68 +555,39 @@ export default function ProjectCommandCenterPage({ params }: { params: { id: str
                 variant="secondary"
                 className="w-full justify-start"
                 leftIcon={<Users className="h-4 w-4" />}
+                onClick={() => router.push(editHref)}
               >
-                View Team
+                Edit Project
               </Button>
             </CardContent>
           </Card>
 
-          {/* Upcoming Deadlines */}
+          {/* Team — the project endpoint exposes only a manager id. */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">Team</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-600">
+                Manager: {shortId(project.managerId)}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Full team membership is not exposed by the project endpoint.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Deadlines — no milestone/deadline endpoint exists. */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Upcoming Deadlines</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                {upcomingDeadlines.map((deadline) => (
-                  <div
-                    key={deadline.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-slate-50"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">
-                        {deadline.title}
-                      </p>
-                      <p className="text-xs text-slate-500">{deadline.date}</p>
-                    </div>
-                    <Badge
-                      variant={
-                        deadline.type === "sprint"
-                          ? "info"
-                          : deadline.type === "approval"
-                          ? "warning"
-                          : "default"
-                      }
-                      size="sm"
-                    >
-                      {deadline.type}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Team */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Team Members</CardTitle>
-              <span className="text-sm text-slate-500">{project.team}</span>
-            </CardHeader>
-            <CardContent>
-              <div className="flex -space-x-2">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div
-                    key={i}
-                    className="h-8 w-8 rounded-full bg-slate-200 border-2 border-white flex items-center justify-center text-xs font-medium text-slate-600"
-                  >
-                    U{i}
-                  </div>
-                ))}
-                <div className="h-8 w-8 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-xs font-medium text-slate-500">
-                  +3
-                </div>
-              </div>
+              <EmptyState
+                icon={Calendar}
+                title="No deadlines available"
+                description="Milestones and deadlines are not exposed by the project endpoint."
+              />
             </CardContent>
           </Card>
         </div>

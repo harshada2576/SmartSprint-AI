@@ -203,7 +203,11 @@ export default function RequirementsPage() {
                       <span className="text-sm text-slate-700">
                         {item.title}
                       </span>
-                      <Button variant="secondary" size="sm">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => router.push(`/requirements/${item.id}`)}
+                      >
                         {item.action}
                       </Button>
                     </div>
