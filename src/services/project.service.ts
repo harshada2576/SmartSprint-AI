@@ -11,6 +11,7 @@ import {
   type ListProjectsResult,
   type ProjectRow,
   findAccessibleProjectById,
+  findProjectRowById,
   generateProjectCode,
   insertProject,
   isProjectCodeTaken,
@@ -60,6 +61,32 @@ export async function listProjects(
   filters: ProjectsQuery,
 ): Promise<ListProjectsResult> {
   return listProjectsScoped(client, scope, filters);
+}
+
+/**
+ * Returns one project visible to the caller, or `null` when it does not
+ * exist or is outside the caller's organization/project scope (no existence
+ * oracle). Read-only: no role gate beyond accessibility — every member with
+ * project visibility (including DEVELOPER) may read. The row is fetched
+ * through the caller's RLS-enforcing client; the explicit
+ * `organizationIds` checks are defense-in-depth.
+ */
+export async function getProjectById(
+  client: SupabaseClient,
+  scope: RequestScope,
+  projectId: string,
+): Promise<ProjectRow | null> {
+  if (scope.organizationIds.length === 0) return null;
+  const accessible = await findAccessibleProjectById(client, scope, projectId);
+  if (!accessible) return null;
+  if (!scope.organizationIds.includes(accessible.organization_id)) {
+    return null;
+  }
+  const row = await findProjectRowById(client, projectId);
+  if (!row) return null;
+  if (row.organization_id !== accessible.organization_id) return null;
+  if (!scope.organizationIds.includes(row.organization_id)) return null;
+  return row;
 }
 
 /**

@@ -84,6 +84,35 @@ export async function listTasks(
   return listTasksScoped(client, scope, filters);
 }
 
+/**
+ * Returns one task whose project is accessible to the caller, or `null`
+ * when it does not exist or its project is outside the caller's scope (no
+ * existence oracle). Read-only: no role gate, no `assignee=me` requirement
+ * — developers may READ any task they otherwise have access to (the
+ * developer mutation restriction applies to PATCH only). The row and its
+ * project probe both run through the caller's RLS-enforcing client; the
+ * explicit `organizationIds` check is defense-in-depth.
+ */
+export async function getTaskById(
+  client: SupabaseClient,
+  scope: RequestScope,
+  taskId: string,
+): Promise<TaskRow | null> {
+  if (scope.organizationIds.length === 0) return null;
+  const row = await findTaskRowById(client, taskId);
+  if (!row) return null;
+  const project = await findAccessibleProjectById(
+    client,
+    scope,
+    row.project_id,
+  );
+  if (!project) return null;
+  if (!scope.organizationIds.includes(project.organization_id)) {
+    return null;
+  }
+  return row;
+}
+
 async function checkAssigneeInOrg(
   client: SupabaseClient,
   assigneeId: string,

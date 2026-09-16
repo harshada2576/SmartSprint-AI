@@ -4,11 +4,15 @@ import {
   resolveRequestScope,
 } from "@/api/auth";
 import { parseRequirementUpdateBody } from "@/schemas/requirement-mutations";
-import { updateRequirement } from "@/services/requirement.service";
+import {
+  getRequirementById,
+  updateRequirement,
+} from "@/services/requirement.service";
 import { isUuid } from "@/schemas/query-params";
 import {
   internalErrorResponse,
   mutationFailureResponse,
+  notFoundResponse,
   successResponse,
   validationErrorResponse,
 } from "@/api/response";
@@ -17,6 +21,61 @@ export const dynamic = "force-dynamic";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * GET /api/requirements/:id — one accessible requirement.
+ *
+ * Auth: 401 `UNAUTHENTICATED` without a valid Supabase session/JWT.
+ * Scope: derived server-side from `organization_members` (never from
+ * browser-supplied org/role/user claims); the requirement's project must be
+ * accessible to the caller (RLS + explicit check). Missing and inaccessible
+ * rows share the same 404 (no existence oracle). Read-only: every role with
+ * project visibility (including DEVELOPER) may read — no assignee gate.
+ * Returns the full requirement row (same shape as the collection endpoint,
+ * compatible with the frontend `normalizeRequirement()`).
+ */
+export async function GET(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
+  let auth;
+  try {
+    auth = await requireAuthenticatedContext(request);
+  } catch (error) {
+    console.error("GET /api/requirements/:id auth failed:", error);
+    return internalErrorResponse();
+  }
+  if (!auth.ok) {
+    return auth.response;
+  }
+  const { context: authContext } = auth;
+
+  const { id } = await context.params;
+  if (!isUuid(id)) {
+    return validationErrorResponse([
+      { field: "id", message: "Requirement id must be a valid UUID" },
+    ]);
+  }
+
+  let scope;
+  try {
+    scope = await resolveRequestScope(authContext.supabase, authContext.user.id);
+  } catch (error) {
+    console.error("GET /api/requirements/:id scope failed:", error);
+    return internalErrorResponse();
+  }
+
+  try {
+    const row = await getRequirementById(authContext.supabase, scope, id);
+    if (!row) {
+      return notFoundResponse("Requirement not found");
+    }
+    return successResponse(row);
+  } catch (error) {
+    console.error("GET /api/requirements/:id failed:", error);
+    return internalErrorResponse();
+  }
 }
 
 /**

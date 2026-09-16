@@ -4,11 +4,12 @@ import {
   resolveRequestScope,
 } from "@/api/auth";
 import { parseTaskUpdateBody } from "@/schemas/task-mutations";
-import { updateTask } from "@/services/task.service";
+import { getTaskById, updateTask } from "@/services/task.service";
 import { isUuid } from "@/schemas/query-params";
 import {
   internalErrorResponse,
   mutationFailureResponse,
+  notFoundResponse,
   successResponse,
   validationErrorResponse,
 } from "@/api/response";
@@ -17,6 +18,63 @@ export const dynamic = "force-dynamic";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * GET /api/tasks/:id — one accessible task.
+ *
+ * Auth: 401 `UNAUTHENTICATED` without a valid Supabase session/JWT.
+ * Scope: derived server-side from `organization_members` (never from
+ * browser-supplied org/role/user claims); the task's project must be
+ * accessible to the caller (RLS + explicit check). Missing and inaccessible
+ * rows share the same 404 (no existence oracle). Read-only: developers may
+ * READ any accessible task — the developer mutation restriction
+ * (self-assigned only, no reassignment) applies to PATCH, never to GET, and
+ * no `assignee=me` filter is required.
+ * Returns the full task row (same shape as the collection endpoint,
+ * compatible with the frontend task normalization).
+ */
+export async function GET(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
+  let auth;
+  try {
+    auth = await requireAuthenticatedContext(request);
+  } catch (error) {
+    console.error("GET /api/tasks/:id auth failed:", error);
+    return internalErrorResponse();
+  }
+  if (!auth.ok) {
+    return auth.response;
+  }
+  const { context: authContext } = auth;
+
+  const { id } = await context.params;
+  if (!isUuid(id)) {
+    return validationErrorResponse([
+      { field: "id", message: "Task id must be a valid UUID" },
+    ]);
+  }
+
+  let scope;
+  try {
+    scope = await resolveRequestScope(authContext.supabase, authContext.user.id);
+  } catch (error) {
+    console.error("GET /api/tasks/:id scope failed:", error);
+    return internalErrorResponse();
+  }
+
+  try {
+    const row = await getTaskById(authContext.supabase, scope, id);
+    if (!row) {
+      return notFoundResponse("Task not found");
+    }
+    return successResponse(row);
+  } catch (error) {
+    console.error("GET /api/tasks/:id failed:", error);
+    return internalErrorResponse();
+  }
 }
 
 /**

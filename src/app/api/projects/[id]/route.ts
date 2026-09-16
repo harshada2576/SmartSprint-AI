@@ -4,11 +4,12 @@ import {
   resolveRequestScope,
 } from "@/api/auth";
 import { parseProjectUpdateBody } from "@/schemas/project-mutations";
-import { updateProject } from "@/services/project.service";
+import { getProjectById, updateProject } from "@/services/project.service";
 import { isUuid } from "@/schemas/query-params";
 import {
   internalErrorResponse,
   mutationFailureResponse,
+  notFoundResponse,
   successResponse,
   validationErrorResponse,
 } from "@/api/response";
@@ -17,6 +18,61 @@ export const dynamic = "force-dynamic";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
+}
+
+/**
+ * GET /api/projects/:id — one accessible project.
+ *
+ * Auth: 401 `UNAUTHENTICATED` without a valid Supabase session/JWT.
+ * Scope: derived server-side from `organization_members` (never from
+ * browser-supplied org/role claims); RLS + an explicit organization check
+ * restrict rows. Missing and inaccessible projects share the same 404 (no
+ * existence oracle). Read-only: every role with project visibility
+ * (including DEVELOPER) may read.
+ * Returns the full project row (same shape as the collection endpoint,
+ * compatible with the frontend `normalizeProject()`).
+ */
+export async function GET(
+  request: NextRequest,
+  context: RouteContext,
+): Promise<NextResponse> {
+  let auth;
+  try {
+    auth = await requireAuthenticatedContext(request);
+  } catch (error) {
+    console.error("GET /api/projects/:id auth failed:", error);
+    return internalErrorResponse();
+  }
+  if (!auth.ok) {
+    return auth.response;
+  }
+  const { context: authContext } = auth;
+
+  const { id } = await context.params;
+  if (!isUuid(id)) {
+    return validationErrorResponse([
+      { field: "id", message: "Project id must be a valid UUID" },
+    ]);
+  }
+
+  let scope;
+  try {
+    scope = await resolveRequestScope(authContext.supabase, authContext.user.id);
+  } catch (error) {
+    console.error("GET /api/projects/:id scope failed:", error);
+    return internalErrorResponse();
+  }
+
+  try {
+    const row = await getProjectById(authContext.supabase, scope, id);
+    if (!row) {
+      return notFoundResponse("Project not found");
+    }
+    return successResponse(row);
+  } catch (error) {
+    console.error("GET /api/projects/:id failed:", error);
+    return internalErrorResponse();
+  }
 }
 
 /**
