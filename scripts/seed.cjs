@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { Client } = require("pg");
-require("dotenv").config();
+require("dotenv").config({ path: [".env.local", ".env"] });
 
 const DATABASE_URL = process.env.DATABASE_URL;
 
