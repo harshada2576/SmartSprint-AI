@@ -8,13 +8,22 @@
  * by all user-facing endpoints.
  */
 
-/** Exactly the three application roles. No new roles may be introduced. */
-export type AppRole = "ADMIN" | "PROJECT_MANAGER" | "DEVELOPER";
+/** Exactly the six application roles. No other normal role is part of the MVP. */
+export type AppRole =
+  | "ADMIN"
+  | "PROJECT_MANAGER"
+  | "DEVELOPER"
+  | "FINANCE"
+  | "LEGAL"
+  | "HR";
 
 const APP_ROLES: ReadonlySet<string> = new Set([
   "ADMIN",
   "PROJECT_MANAGER",
   "DEVELOPER",
+  "FINANCE",
+  "LEGAL",
+  "HR",
 ]);
 
 /** Runtime guard for role values read from the database. Fail-closed. */
@@ -29,6 +38,11 @@ export function isAppRole(value: unknown): value is AppRole {
  * plus `organization_members` rows read through that same authenticated
  * context. Never populated from request bodies, query params, or any
  * browser-supplied role/organization claims.
+ *
+ * Role semantics (authoritative MVP model):
+ * - ADMIN / PROJECT_MANAGER: organization-wide (staff).
+ * - DEVELOPER / FINANCE / LEGAL: project-scoped via `project_members`.
+ * - HR: organization-scoped, zero project-data access.
  */
 export interface RequestScope {
   /** Verified `auth.uid()` of the caller. */
@@ -39,6 +53,32 @@ export interface RequestScope {
   rolesByOrg: Record<string, AppRole>;
   /** True when the caller is ADMIN or PROJECT_MANAGER in at least one org. */
   isStaffAnywhere: boolean;
+  /** Primary organization id (first active membership), if any. */
+  primaryOrganizationId?: string;
+  /** Highest/primary role of the user across memberships. */
+  primaryRole?: AppRole;
+}
+
+/** Role priority for primary-role resolution (highest wins). */
+export const ROLE_PRIORITY: Readonly<Record<AppRole, number>> = {
+  ADMIN: 6,
+  PROJECT_MANAGER: 5,
+  FINANCE: 4,
+  LEGAL: 3,
+  DEVELOPER: 2,
+  HR: 1,
+};
+
+/** Returns true for org-wide operational staff (ADMIN or PROJECT_MANAGER). */
+export function isStaffRole(role: AppRole | undefined | string): boolean {
+  return role === "ADMIN" || role === "PROJECT_MANAGER";
+}
+
+/** Returns true when the role is project-scoped (DEV / FINANCE / LEGAL). */
+export function isProjectScopedRole(
+  role: AppRole | undefined | string,
+): boolean {
+  return role === "DEVELOPER" || role === "FINANCE" || role === "LEGAL";
 }
 
 export type ApiErrorCode =

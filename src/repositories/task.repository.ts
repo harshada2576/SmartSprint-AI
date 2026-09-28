@@ -53,6 +53,12 @@ export interface TaskRow {
   assignee_id: string | null;
   column_status: string;
   due_date: string | null;
+  progress_percent?: number;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
+  is_blocked?: boolean;
+  blocked_reason?: string | null;
+  blocked_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -175,6 +181,12 @@ export interface TaskInsert {
   requirement_id?: string | null;
   column_status?: string;
   due_date?: string | null;
+  progress_percent?: number | null;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
+  is_blocked?: boolean;
+  blocked_reason?: string | null;
+  blocked_at?: string | null;
 }
 
 export interface TaskPatch {
@@ -187,6 +199,12 @@ export interface TaskPatch {
   requirement_id?: string | null;
   column_status?: string;
   due_date?: string | null;
+  progress_percent?: number | null;
+  estimated_hours?: number | null;
+  actual_hours?: number | null;
+  is_blocked?: boolean;
+  blocked_reason?: string | null;
+  blocked_at?: string | null;
 }
 
 /** Minimal projection for same-project linkage checks. */
@@ -315,6 +333,12 @@ export async function insertTask(
         ? { column_status: row.column_status }
         : {}),
       ...(row.due_date !== undefined ? { due_date: row.due_date } : {}),
+      ...(row.progress_percent !== undefined ? { progress_percent: row.progress_percent } : {}),
+      ...(row.estimated_hours !== undefined ? { estimated_hours: row.estimated_hours } : {}),
+      ...(row.actual_hours !== undefined ? { actual_hours: row.actual_hours } : {}),
+      ...(row.is_blocked !== undefined ? { is_blocked: row.is_blocked } : {}),
+      ...(row.blocked_reason !== undefined ? { blocked_reason: row.blocked_reason } : {}),
+      ...(row.blocked_at !== undefined ? { blocked_at: row.blocked_at } : {}),
     })
     .select("*")
     .single();

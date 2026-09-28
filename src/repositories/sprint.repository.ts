@@ -28,6 +28,9 @@ export interface SprintRow {
   end_date: string | null;
   total_points: number | null;
   completed_points: number | null;
+  capacity_points: number | null;
+  capacity_hours: number | null;
+  created_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -149,6 +152,9 @@ export interface SprintInsert {
   end_date?: string | null;
   total_points?: number | null;
   completed_points?: number | null;
+  capacity_points?: number | null;
+  capacity_hours?: number | null;
+  created_by?: string | null;
 }
 
 export interface SprintPatch {
@@ -159,6 +165,8 @@ export interface SprintPatch {
   end_date?: string | null;
   total_points?: number | null;
   completed_points?: number | null;
+  capacity_points?: number | null;
+  capacity_hours?: number | null;
 }
 
 /**
@@ -199,6 +207,15 @@ export async function insertSprint(
         : {}),
       ...(row.completed_points !== undefined
         ? { completed_points: row.completed_points }
+        : {}),
+      ...(row.capacity_points !== undefined
+        ? { capacity_points: row.capacity_points }
+        : {}),
+      ...(row.capacity_hours !== undefined
+        ? { capacity_hours: row.capacity_hours }
+        : {}),
+      ...(row.created_by !== undefined
+        ? { created_by: row.created_by }
         : {}),
     })
     .select("*")

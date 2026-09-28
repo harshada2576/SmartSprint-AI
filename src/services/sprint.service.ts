@@ -100,6 +100,15 @@ export async function createSprint(
       ...(input.completedPoints !== undefined
         ? { completed_points: input.completedPoints }
         : {}),
+      ...(input.capacityPoints !== undefined
+        ? { capacity_points: input.capacityPoints }
+        : {}),
+      ...(input.capacityHours !== undefined
+        ? { capacity_hours: input.capacityHours }
+        : {}),
+      ...(input.createdBy !== undefined
+        ? { created_by: input.createdBy }
+        : {}),
     });
     return { ok: true, data: created };
   } catch (error) {
@@ -157,6 +166,8 @@ export async function updateSprint(
     end_date?: string | null;
     total_points?: number | null;
     completed_points?: number | null;
+    capacity_points?: number | null;
+    capacity_hours?: number | null;
   } = {};
   if (input.name !== undefined) patch.name = input.name;
   if (input.goal !== undefined) patch.goal = input.goal;
@@ -166,6 +177,10 @@ export async function updateSprint(
   if (input.totalPoints !== undefined) patch.total_points = input.totalPoints;
   if (input.completedPoints !== undefined)
     patch.completed_points = input.completedPoints;
+  if (input.capacityPoints !== undefined)
+    patch.capacity_points = input.capacityPoints;
+  if (input.capacityHours !== undefined)
+    patch.capacity_hours = input.capacityHours;
 
   if (Object.keys(patch).length === 0) {
     return invalid("body", "Request body must include at least one editable field");

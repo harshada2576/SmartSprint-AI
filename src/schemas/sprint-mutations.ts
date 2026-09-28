@@ -42,6 +42,9 @@ export interface SprintCreateInput {
   endDate?: string | null;
   totalPoints?: number | null;
   completedPoints?: number | null;
+  capacityPoints?: number | null;
+  capacityHours?: number | null;
+  createdBy?: string | null;
 }
 
 export interface SprintUpdateInput {
@@ -52,6 +55,8 @@ export interface SprintUpdateInput {
   endDate?: string | null;
   totalPoints?: number | null;
   completedPoints?: number | null;
+  capacityPoints?: number | null;
+  capacityHours?: number | null;
   /**
    * Present when the body attempted a project move (service maps to 400 —
    * sprints never move projects; cross-org moves are additionally blocked
@@ -274,6 +279,20 @@ export function parseSprintCreateBody(
   );
   if (completedPoints !== undefined) value.completedPoints = completedPoints;
 
+  const capacityPoints = parseOptionalPoints(
+    readAlias(body, "capacityPoints", "capacity_points"),
+    "capacityPoints",
+    details,
+  );
+  if (capacityPoints !== undefined) value.capacityPoints = capacityPoints;
+
+  const capacityHours = parseOptionalPoints(
+    readAlias(body, "capacityHours", "capacity_hours"),
+    "capacityHours",
+    details,
+  );
+  if (capacityHours !== undefined) value.capacityHours = capacityHours;
+
   checkDateOrder(value.startDate, value.endDate, details);
 
   if (details.length > 0) return { ok: false, details };
@@ -292,6 +311,10 @@ const SPRINT_UPDATE_FIELDS = [
   "total_points",
   "completedPoints",
   "completed_points",
+  "capacityPoints",
+  "capacity_points",
+  "capacityHours",
+  "capacity_hours",
 ] as const;
 
 /** PATCH /api/sprints/:id body — all fields optional, one required. */
@@ -394,6 +417,22 @@ export function parseSprintUpdateBody(
       details,
     );
     if (completedPoints !== undefined) value.completedPoints = completedPoints;
+  }
+  if (hasAlias(body, "capacityPoints", "capacity_points")) {
+    const capacityPoints = parseOptionalPoints(
+      readAlias(body, "capacityPoints", "capacity_points"),
+      "capacityPoints",
+      details,
+    );
+    if (capacityPoints !== undefined) value.capacityPoints = capacityPoints;
+  }
+  if (hasAlias(body, "capacityHours", "capacity_hours")) {
+    const capacityHours = parseOptionalPoints(
+      readAlias(body, "capacityHours", "capacity_hours"),
+      "capacityHours",
+      details,
+    );
+    if (capacityHours !== undefined) value.capacityHours = capacityHours;
   }
 
   checkDateOrder(value.startDate, value.endDate, details);

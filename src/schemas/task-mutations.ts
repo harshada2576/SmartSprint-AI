@@ -36,6 +36,7 @@ export const TASK_COLUMN_STATUSES = [
   "review",
   "testing",
   "done",
+  "blocked",
 ] as const;
 
 export const TASK_PRIORITIES = ["high", "medium", "low"] as const;
@@ -57,6 +58,12 @@ export interface TaskCreateInput {
   requirementId?: string | null;
   columnStatus?: string;
   dueDate?: string | null;
+  progressPercent?: number | null;
+  estimatedHours?: number | null;
+  actualHours?: number | null;
+  isBlocked?: boolean;
+  blockedReason?: string | null;
+  blockedAt?: string | null;
 }
 
 export interface TaskUpdateInput {
@@ -69,15 +76,14 @@ export interface TaskUpdateInput {
   requirementId?: string | null;
   columnStatus?: string;
   dueDate?: string | null;
-  /**
-   * Present when the body attempted a project move (service maps to 400 —
-   * tasks never move projects; cross-org moves are additionally blocked by
-   * the `trg_tasks_forbid_cross_org_move` trigger).
-   */
+  progressPercent?: number | null;
+  estimatedHours?: number | null;
+  actualHours?: number | null;
+  isBlocked?: boolean;
+  blockedReason?: string | null;
+  blockedAt?: string | null;
   projectIdAttempt?: string;
-  /** Present when the body attempted a display-ID rewrite (service → 400). */
   displayIdAttempt?: boolean;
-  /** Present when the body attempted an org transfer (service maps to 403). */
   organizationIdAttempt?: string;
 }
 
@@ -245,6 +251,47 @@ function parseOptionalDate(
   return value;
 }
 
+function parseOptionalProgress(
+  raw: unknown,
+  details: ApiErrorDetail[],
+): number | null | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "string" && raw.trim() === "") return null;
+  const num = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (!Number.isInteger(num)) {
+    details.push(fail("progressPercent", 'Field "progressPercent" must be an integer'));
+    return undefined;
+  }
+  if (num < 0 || num > 100) {
+    details.push(fail("progressPercent", 'Field "progressPercent" must be between 0 and 100'));
+    return undefined;
+  }
+  return num;
+}
+
+function parseOptionalHours(
+  raw: unknown,
+  field: string,
+  details: ApiErrorDetail[],
+): number | null | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "string" && raw.trim() === "") return null;
+  const num = typeof raw === "number" ? raw : Number(String(raw).trim());
+  if (Number.isNaN(num) || num < 0) {
+    details.push(fail(field, `Field "${field}" must be a non-negative number`));
+    return undefined;
+  }
+  return num;
+}
+
+function parseOptionalBoolean(raw: unknown): boolean | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw === "boolean") return raw;
+  if (raw === "true" || raw === 1) return true;
+  if (raw === "false" || raw === 0) return false;
+  return undefined;
+}
+
 function parseColumnStatus(
   record: Record<string, unknown>,
   details: ApiErrorDetail[],
@@ -332,7 +379,73 @@ export function parseTaskCreateBody(
     readAlias(body, "dueDate", "due_date"),
     details,
   );
-  if (dueDate !== undefined) value.dueDate = dueDate;
+function parseOptionalHours(
+  raw: unknown,
+  field: string,
+  details: ApiErrorDetail[],
+): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const num = typeof raw === "number" ? raw : Number(raw);
+  if (Number.isNaN(num) || num < 0) {
+    details.push(fail(field, `Field "${field}" must be a non-negative number`));
+    return undefined;
+  }
+  return Math.round(num * 100) / 100;
+}
+
+function parseOptionalProgress(
+  raw: unknown,
+  details: ApiErrorDetail[],
+): number | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return undefined;
+  const num = typeof raw === "number" ? raw : Number(raw);
+  if (Number.isNaN(num) || num < 0 || num > 100) {
+    details.push(fail("progressPercent", 'Field "progressPercent" must be an integer between 0 and 100'));
+    return undefined;
+  }
+  return Math.round(num);
+}
+
+function parseOptionalBoolean(raw: unknown): boolean | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw === "boolean") return raw;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return undefined;
+}
+
+  const progressPercent = parseOptionalProgress(
+    readAlias(body, "progressPercent", "progress_percent", "progress"),
+    details,
+  );
+  if (progressPercent !== undefined) value.progressPercent = progressPercent;
+
+  const estimatedHours = parseOptionalHours(
+    readAlias(body, "estimatedHours", "estimated_hours"),
+    "estimatedHours",
+    details,
+  );
+  if (estimatedHours !== undefined) value.estimatedHours = estimatedHours;
+
+  const actualHours = parseOptionalHours(
+    readAlias(body, "actualHours", "actual_hours"),
+    "actualHours",
+    details,
+  );
+  if (actualHours !== undefined) value.actualHours = actualHours;
+
+  const isBlocked = parseOptionalBoolean(
+    readAlias(body, "isBlocked", "is_blocked"),
+  );
+  if (isBlocked !== undefined) value.isBlocked = isBlocked;
+
+  const blockedReason = parseOptionalDescription(
+    readAlias(body, "blockedReason", "blocked_reason"),
+    details,
+  );
+  if (blockedReason !== undefined) value.blockedReason = blockedReason;
 
   if (details.length > 0) return { ok: false, details };
   return { ok: true, value };
@@ -355,6 +468,19 @@ const TASK_UPDATE_FIELDS = [
   "status",
   "dueDate",
   "due_date",
+  "progressPercent",
+  "progress_percent",
+  "progress",
+  "estimatedHours",
+  "estimated_hours",
+  "actualHours",
+  "actual_hours",
+  "isBlocked",
+  "is_blocked",
+  "blockedReason",
+  "blocked_reason",
+  "blockedAt",
+  "blocked_at",
 ] as const;
 
 /** PATCH /api/tasks/:id body — all fields optional, one required. */
@@ -479,6 +605,42 @@ export function parseTaskUpdateBody(
       details,
     );
     if (dueDate !== undefined) value.dueDate = dueDate;
+  }
+  if (hasAlias(body, "progressPercent", "progress_percent", "progress")) {
+    const progressPercent = parseOptionalProgress(
+      readAlias(body, "progressPercent", "progress_percent", "progress"),
+      details,
+    );
+    if (progressPercent !== undefined) value.progressPercent = progressPercent;
+  }
+  if (hasAlias(body, "estimatedHours", "estimated_hours")) {
+    const estimatedHours = parseOptionalHours(
+      readAlias(body, "estimatedHours", "estimated_hours"),
+      "estimatedHours",
+      details,
+    );
+    if (estimatedHours !== undefined) value.estimatedHours = estimatedHours;
+  }
+  if (hasAlias(body, "actualHours", "actual_hours")) {
+    const actualHours = parseOptionalHours(
+      readAlias(body, "actualHours", "actual_hours"),
+      "actualHours",
+      details,
+    );
+    if (actualHours !== undefined) value.actualHours = actualHours;
+  }
+  if (hasAlias(body, "isBlocked", "is_blocked")) {
+    const isBlocked = parseOptionalBoolean(
+      readAlias(body, "isBlocked", "is_blocked"),
+    );
+    if (isBlocked !== undefined) value.isBlocked = isBlocked;
+  }
+  if (hasAlias(body, "blockedReason", "blocked_reason")) {
+    const blockedReason = parseOptionalDescription(
+      readAlias(body, "blockedReason", "blocked_reason"),
+      details,
+    );
+    if (blockedReason !== undefined) value.blockedReason = blockedReason;
   }
 
   if (details.length > 0) return { ok: false, details };

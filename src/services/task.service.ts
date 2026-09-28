@@ -45,11 +45,13 @@ import { DbWriteError, isUserOrgMember } from "@/repositories/mutation-helpers";
  *   assigned to the caller (any `assigneeId` key in a developer body →
  *   FORBIDDEN — no claiming unassigned tasks, no giving tasks away, no
  *   assigning peers), same project (project/display moves → 400,
- *   org moves → 403), same-project sprint and requirement linkage.
- *   Status advances on the caller's own task flow through the same path and
- *   succeed when the RLS `tasks_update_dev_self` policy permits them; any
- *   RLS denial surfaces as 403, never 500. RLS re-enforces all of this at
- *   the database layer.
+ *   org moves → 403). Field allowlist is status / progress / blocked /
+ *   reason only (title, priority, points, sprint/requirement linkage, dates,
+ *   and estimates → FORBIDDEN). Status advances on the caller's own task
+ *   flow through the same path and succeed when the RLS
+ *   `tasks_update_dev_self` policy permits them; any RLS denial surfaces
+ *   as 403, never 500. RLS + the `trg_tasks_restrict_dev_update` trigger
+ *   re-enforce all of this at the database layer.
  * - `display_id` is always server-generated (`TASK-NNN`, project-scoped
  *   unique) and immutable; client values are never read.
  */
@@ -222,6 +224,12 @@ export async function createTask(
           ? { column_status: input.columnStatus }
           : {}),
         ...(input.dueDate !== undefined ? { due_date: input.dueDate } : {}),
+        ...(input.progressPercent !== undefined ? { progress_percent: input.progressPercent } : {}),
+        ...(input.estimatedHours !== undefined ? { estimated_hours: input.estimatedHours } : {}),
+        ...(input.actualHours !== undefined ? { actual_hours: input.actualHours } : {}),
+        ...(input.isBlocked !== undefined ? { is_blocked: input.isBlocked } : {}),
+        ...(input.blockedReason !== undefined ? { blocked_reason: input.blockedReason } : {}),
+        ...(input.blockedAt !== undefined ? { blocked_at: input.blockedAt } : {}),
       });
       return { ok: true, data: created };
     } catch (error) {
@@ -283,6 +291,25 @@ export async function updateTask(
     if (input.assigneeId !== undefined) {
       return forbidden("Tasks cannot be reassigned by developers");
     }
+    // Matrix: non-staff may edit ONLY status / progress / blocked / reason
+    // on their own assigned tasks (API layer; the
+    // trg_tasks_restrict_dev_update trigger re-enforces at the DB layer).
+    if (
+      input.title !== undefined ||
+      input.description !== undefined ||
+      input.priority !== undefined ||
+      input.points !== undefined ||
+      input.sprintId !== undefined ||
+      input.requirementId !== undefined ||
+      input.dueDate !== undefined ||
+      input.estimatedHours !== undefined ||
+      input.actualHours !== undefined ||
+      input.blockedAt !== undefined
+    ) {
+      return forbidden(
+        "Developers may only update status, progress, and blocked state on their own tasks",
+      );
+    }
   }
 
   const patch: {
@@ -295,6 +322,12 @@ export async function updateTask(
     requirement_id?: string | null;
     column_status?: string;
     due_date?: string | null;
+    progress_percent?: number | null;
+    estimated_hours?: number | null;
+    actual_hours?: number | null;
+    is_blocked?: boolean;
+    blocked_reason?: string | null;
+    blocked_at?: string | null;
   } = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
@@ -306,6 +339,31 @@ export async function updateTask(
     patch.requirement_id = input.requirementId;
   if (input.columnStatus !== undefined) patch.column_status = input.columnStatus;
   if (input.dueDate !== undefined) patch.due_date = input.dueDate;
+  if (input.progressPercent !== undefined) {
+    patch.progress_percent =
+      input.progressPercent === null
+        ? null
+        : Math.max(0, Math.min(100, Math.round(input.progressPercent)));
+    if (patch.progress_percent === 100 && patch.column_status === undefined && current.column_status !== "done") {
+      patch.column_status = "done";
+    }
+  }
+  if (input.estimatedHours !== undefined) patch.estimated_hours = input.estimatedHours;
+  if (input.actualHours !== undefined) patch.actual_hours = input.actualHours;
+  if (input.isBlocked !== undefined) {
+    patch.is_blocked = input.isBlocked;
+    if (input.isBlocked) {
+      patch.blocked_at = new Date().toISOString();
+      if (input.blockedReason !== undefined) {
+        patch.blocked_reason = input.blockedReason;
+      }
+    } else {
+      patch.blocked_at = null;
+      patch.blocked_reason = null;
+    }
+  } else if (input.blockedReason !== undefined) {
+    patch.blocked_reason = input.blockedReason;
+  }
 
   if (Object.keys(patch).length === 0) {
     return invalid("body", "Request body must include at least one editable field");

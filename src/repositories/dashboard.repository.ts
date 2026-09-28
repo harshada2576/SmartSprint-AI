@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { isAppRole } from "@/types/api";
+import { isAppRole, type AppRole } from "@/types/api";
 
 /**
  * Dashboard data access — scoped to the authenticated caller.
@@ -24,7 +24,7 @@ import { isAppRole } from "@/types/api";
 
 export interface DashboardMembership {
   organization_id: string;
-  role: "ADMIN" | "PROJECT_MANAGER" | "DEVELOPER";
+  role: AppRole;
   created_at: string | null;
 }
 
