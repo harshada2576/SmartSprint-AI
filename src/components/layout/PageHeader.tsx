@@ -19,6 +19,7 @@ interface PageHeaderProps {
     onClick: () => void;
     icon?: React.ReactNode;
   }[];
+  actions?: React.ReactNode;
   children?: React.ReactNode;
   className?: string;
 }
@@ -29,6 +30,7 @@ export function PageHeader({
   breadcrumb,
   primaryAction,
   secondaryActions,
+  actions,
   children,
   className,
 }: PageHeaderProps) {
@@ -54,6 +56,7 @@ export function PageHeader({
         </div>
 
         <div className="flex items-center gap-2">
+          {actions}
           {secondaryActions?.map((action, index) => (
             <Button
               key={index}

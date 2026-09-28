@@ -214,16 +214,26 @@ export default function ExecutionPage() {
                         <span>Due {formatDueDate(task.dueDate)}</span>
                       </div>
                     </div>
+                    {task.isBlocked && task.blockedReason && (
+                      <div className="mb-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="font-semibold">Blocked:</span> {task.blockedReason}
+                      </div>
+                    )}
                     <div className="flex items-center gap-3">
                       <div className="flex-1">
-                        {/* Stage-based estimate: the tasks API exposes no
-                            percent-complete field. */}
-                        <Progress value={taskStageProgress(task.columnStatus)} size="sm" />
+                        <Progress value={task.progressPercent ?? taskStageProgress(task.columnStatus)} size="sm" />
                       </div>
                       <span className="text-xs text-slate-500 w-10">
-                        {taskStageProgress(task.columnStatus)}%
+                        {task.progressPercent ?? taskStageProgress(task.columnStatus)}%
                       </span>
-                      <StatusChip status={task.columnStatus} size="sm" />
+                      {task.isBlocked || task.columnStatus === "blocked" ? (
+                        <Badge variant="danger" size="sm" className="bg-red-500 text-white uppercase text-[10px]">
+                          Blocked
+                        </Badge>
+                      ) : (
+                        <StatusChip status={task.columnStatus} size="sm" />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -303,16 +313,26 @@ export default function ExecutionPage() {
                             <span>Due {formatDueDate(task.dueDate)}</span>
                           </div>
                         </div>
+                        {task.isBlocked && task.blockedReason && (
+                          <div className="mb-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="font-semibold">Blocked:</span> {task.blockedReason}
+                          </div>
+                        )}
                         <div className="flex items-center gap-3">
                           <div className="flex-1">
-                            {/* Stage-based estimate: the tasks API exposes no
-                                percent-complete field. */}
-                            <Progress value={taskStageProgress(task.columnStatus)} size="sm" />
+                            <Progress value={task.progressPercent ?? taskStageProgress(task.columnStatus)} size="sm" />
                           </div>
                           <span className="text-xs text-slate-500 w-10">
-                            {taskStageProgress(task.columnStatus)}%
+                            {task.progressPercent ?? taskStageProgress(task.columnStatus)}%
                           </span>
-                          <StatusChip status={task.columnStatus} size="sm" />
+                          {task.isBlocked || task.columnStatus === "blocked" ? (
+                            <Badge variant="danger" size="sm" className="bg-red-500 text-white uppercase text-[10px]">
+                              Blocked
+                            </Badge>
+                          ) : (
+                            <StatusChip status={task.columnStatus} size="sm" />
+                          )}
                         </div>
                       </div>
                     ))}

@@ -10,7 +10,8 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Select } from "@/components/ui/Select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
-import { ArrowLeft, AlertCircle, CheckCircle } from "lucide-react";
+import { ArrowLeft, AlertCircle, CheckCircle, Sparkles } from "lucide-react";
+import { AiProjectBreakdownModal } from "@/components/ai/AiProjectBreakdownModal";
 import { normalizeProject } from "@/lib/api-client";
 
 // Field sets mirror `src/schemas/project-mutations.ts` (kept local so this
@@ -59,6 +60,7 @@ function isValidDate(value: string): boolean {
 export default function CreateProjectPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = React.useState("general");
+  const [isBreakdownOpen, setIsBreakdownOpen] = React.useState(false);
 
   const [name, setName] = React.useState("");
   const [code, setCode] = React.useState("");
@@ -348,6 +350,37 @@ export default function CreateProjectPage() {
           <span>{formError}</span>
         </div>
       ) : null}
+
+      {/* AI Breakdown Fast-Track Banner */}
+      <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-primary/10 via-purple-500/10 to-primary/5 border border-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">
+              Generate Project Plan with SmartSprint AI
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Enter a project brief to automatically break down epics, user stories, task estimations, and suggested sprints.
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          onClick={() => setIsBreakdownOpen(true)}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2 whitespace-nowrap text-xs shadow"
+        >
+          <Sparkles className="w-4 h-4" />
+          Launch AI Breakdown
+        </Button>
+      </div>
+
+      <AiProjectBreakdownModal
+        isOpen={isBreakdownOpen}
+        onClose={() => setIsBreakdownOpen(false)}
+        projectName={name}
+      />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6">

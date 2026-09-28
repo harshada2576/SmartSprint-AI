@@ -24,11 +24,110 @@ interface TopNavigationProps {
   isSidebarCollapsed: boolean;
 }
 
+interface MeState {
+  displayName: string;
+  email: string;
+  initials: string;
+  organizationName: string | null;
+}
+
+/**
+ * Loads the authenticated caller's profile + organization context from the
+ * server-authenticated GET /api/me (same-origin cookies, no client-supplied
+ * identity). The browser never chooses an organization id: the server
+ * derives membership from auth.uid() and returns the primary organization.
+ * No hardcoded demo names/organizations are rendered — while loading,
+ * neutral placeholders are shown.
+ */
+function useMe(): { me: MeState | null; isLoading: boolean } {
+  const [me, setMe] = React.useState<MeState | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    (async () => {
+      try {
+        const response = await fetch("/api/me", {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+        const payload: unknown = await response.json().catch(() => null);
+        if (
+          typeof payload !== "object" ||
+          payload === null ||
+          !("success" in payload) ||
+          (payload as { success: unknown }).success !== true ||
+          !("data" in payload) ||
+          typeof (payload as { data?: unknown }).data !== "object" ||
+          (payload as { data?: unknown }).data === null
+        ) {
+          return;
+        }
+        const data = (payload as { data: Record<string, unknown> }).data;
+        const user =
+          typeof data.user === "object" && data.user !== null
+            ? (data.user as Record<string, unknown>)
+            : {};
+        const primaryOrg =
+          typeof data.primaryOrganization === "object" &&
+          data.primaryOrganization !== null
+            ? (data.primaryOrganization as Record<string, unknown>)
+            : null;
+        const displayName =
+          typeof user.displayName === "string" && user.displayName.length > 0
+            ? user.displayName
+            : "User";
+        const email = typeof user.email === "string" ? user.email : "";
+        const initials =
+          typeof user.avatarInitials === "string" &&
+          user.avatarInitials.length > 0
+            ? user.avatarInitials
+            : displayName
+                .split(/\s+/)
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((part) => part.charAt(0).toUpperCase())
+                .join("") || "U";
+        if (cancelled) return;
+        setMe({
+          displayName,
+          email,
+          initials,
+          organizationName:
+            primaryOrg !== null &&
+            typeof primaryOrg.name === "string" &&
+            primaryOrg.name.length > 0
+              ? primaryOrg.name
+              : null,
+        });
+      } catch {
+        // Fail-closed display: keep neutral placeholders, never demo data.
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, []);
+
+  return { me, isLoading };
+}
+
 export function TopNavigation({ isSidebarCollapsed }: TopNavigationProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
   const [showCommandPalette, setShowCommandPalette] = React.useState(false);
   const [isSigningOut, setIsSigningOut] = React.useState(false);
+  const { me, isLoading: isMeLoading } = useMe();
 
   const handleSignOut = React.useCallback(async () => {
     if (isSigningOut) return;
@@ -64,13 +163,15 @@ export function TopNavigation({ isSidebarCollapsed }: TopNavigationProps) {
         )}
       >
         <div className="h-full flex items-center justify-between px-6">
-          {/* Left: Breadcrumb area - could be dynamic */}
+          {/* Left: Breadcrumb area - organization of the authenticated user */}
           <div className="flex items-center gap-4">
             <div className="hidden md:flex items-center text-sm text-slate-500">
               <span>Organization</span>
               <span className="mx-2">/</span>
               <span className="text-slate-900 font-medium">
-                Acme Corporation
+                {isMeLoading
+                  ? "Loading…"
+                  : (me?.organizationName ?? "No organization")}
               </span>
             </div>
           </div>
@@ -146,7 +247,13 @@ export function TopNavigation({ isSidebarCollapsed }: TopNavigationProps) {
                   className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
                 >
                   <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center">
-                    <User className="h-4 w-4 text-slate-600" />
+                    {me !== null ? (
+                      <span className="text-xs font-medium text-slate-700">
+                        {me.initials}
+                      </span>
+                    ) : (
+                      <User className="h-4 w-4 text-slate-600" />
+                    )}
                   </div>
                   <ChevronDown className="h-4 w-4 text-slate-400" />
                 </button>
@@ -155,9 +262,11 @@ export function TopNavigation({ isSidebarCollapsed }: TopNavigationProps) {
             >
               <div className="px-4 py-2 border-b border-slate-100">
                 <p className="text-sm font-medium text-slate-900">
-                  John Smith
+                  {isMeLoading ? "Loading…" : (me?.displayName ?? "User")}
                 </p>
-                <p className="text-xs text-slate-500">john@example.com</p>
+                <p className="text-xs text-slate-500">
+                  {isMeLoading ? "…" : (me?.email ?? "")}
+                </p>
               </div>
               <DropdownItem icon={<User className="h-4 w-4" />}>
                 Profile

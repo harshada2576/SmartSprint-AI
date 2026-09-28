@@ -1,281 +1,437 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { AuthenticatedLayout } from "@/components/layout/AuthenticatedLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Modal } from "@/components/ui/Modal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
-import { SearchInput } from "@/components/ui/SearchInput";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/Table";
 import {
   Users,
   UserPlus,
   Mail,
-  MoreHorizontal,
-  Shield,
+  Copy,
+  Check,
+  Search,
+  AlertCircle,
   Briefcase,
   Clock,
-  Filter,
-  Download,
+  CheckCircle2,
+  Calendar,
+  Loader2,
 } from "lucide-react";
 
-const users = [
-  { id: 1, name: "John Smith", email: "john@example.com", role: "Project Manager", department: "Engineering", status: "active", projects: 3, lastActive: "2 hours ago" },
-  { id: 2, name: "Sarah Chen", email: "sarah@example.com", role: "Tech Lead", department: "Engineering", status: "active", projects: 2, lastActive: "5 hours ago" },
-  { id: 3, name: "Mike Johnson", email: "mike@example.com", role: "Senior Developer", department: "Engineering", status: "active", projects: 3, lastActive: "1 hour ago" },
-  { id: 4, name: "Emily Davis", email: "emily@example.com", role: "UI/UX Designer", department: "Design", status: "active", projects: 2, lastActive: "30 min ago" },
-  { id: 5, name: "David Wilson", email: "david@example.com", role: "QA Engineer", department: "Quality Assurance", status: "active", projects: 2, lastActive: "3 hours ago" },
-  { id: 6, name: "Lisa Anderson", email: "lisa@example.com", role: "Business Analyst", department: "Product", status: "inactive", projects: 1, lastActive: "2 days ago" },
-];
-
-const teams = [
-  { id: 1, name: "Engineering", members: 12, lead: "Sarah Chen" },
-  { id: 2, name: "Design", members: 4, lead: "Emily Davis" },
-  { id: 3, name: "Quality Assurance", members: 3, lead: "David Wilson" },
-  { id: 4, name: "Product", members: 2, lead: "John Smith" },
-];
-
-const invitations = [
-  { id: 1, email: "alex@example.com", role: "Developer", sent: "2 days ago", status: "pending" },
-  { id: 2, email: "jane@example.com", role: "Designer", sent: "1 week ago", status: "expired" },
-];
-
-const roles = [
-  { id: 1, name: "Administrator", permissions: "Full Access", users: 2 },
-  { id: 2, name: "Project Manager", permissions: "Project Management", users: 3 },
-  { id: 3, name: "Developer", permissions: "Development Tasks", users: 8 },
-  { id: 4, name: "Viewer", permissions: "Read Only", users: 5 },
-];
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string | null;
+  jobTitle: string | null;
+  activeTasks: number;
+  completedTasks: number;
+  blockedTasks: number;
+  workloadHours: number;
+  currentSprint: string | null;
+}
 
 export default function TeamPage() {
-  const router = useRouter();
+  const [members, setMembers] = React.useState<TeamMember[]>([]);
+  const [invitations, setInvitations] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [roleFilter, setRoleFilter] = React.useState("ALL");
 
-  const filteredUsers = users.filter(
-    (user) =>
+  // Invite modal state
+  const [isInviteOpen, setIsInviteOpen] = React.useState(false);
+  const [inviteEmail, setInviteEmail] = React.useState("");
+  const [inviteRole, setInviteRole] = React.useState<"PROJECT_MANAGER" | "DEVELOPER">("DEVELOPER");
+  const [inviting, setInviting] = React.useState(false);
+  const [inviteError, setInviteError] = React.useState<string | null>(null);
+  const [createdInviteUrl, setCreatedInviteUrl] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState(false);
+
+  const fetchTeam = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      const [teamRes, invitesRes] = await Promise.all([
+        fetch("/api/team"),
+        fetch("/api/invitations"),
+      ]);
+
+      if (teamRes.ok) {
+        const teamData = await teamRes.json();
+        setMembers(teamData.data || []);
+      }
+      if (invitesRes.ok) {
+        const invitesData = await invitesRes.json();
+        setInvitations(invitesData.data || []);
+      }
+    } catch (err) {
+      console.error("Failed to load team data", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchTeam();
+  }, [fetchTeam]);
+
+  const handleSendInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) return;
+
+    try {
+      setInviting(true);
+      setInviteError(null);
+      const res = await fetch("/api/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: inviteEmail.trim(),
+          role: inviteRole,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to generate invitation");
+      }
+
+      setCreatedInviteUrl(data.data.inviteUrl);
+      fetchTeam();
+    } catch (err: any) {
+      setInviteError(err.message || "An unexpected error occurred");
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (createdInviteUrl) {
+      navigator.clipboard.writeText(createdInviteUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const filteredMembers = members.filter((m) => {
+    const matchesSearch =
       searchQuery === "" ||
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.email.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesRole =
+      roleFilter === "ALL" ||
+      m.role.toUpperCase() === roleFilter.toUpperCase();
+
+    return matchesSearch && matchesRole;
+  });
 
   return (
     <AuthenticatedLayout>
       <PageHeader
-        title="Team Management"
-        description="Manage users, teams, and permissions"
+        title="Team Directory & Workload"
+        description="View real-time team assignments, active workloads, and invite members"
         breadcrumb={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Team" },
         ]}
         primaryAction={{
           label: "Invite Member",
-          onClick: () => {},
+          onClick: () => {
+            setInviteEmail("");
+            setInviteError(null);
+            setCreatedInviteUrl(null);
+            setIsInviteOpen(true);
+          },
         }}
       />
 
-      <Tabs defaultValue="users">
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <Card className="border border-border">
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">Total Members</div>
+            <div className="text-2xl font-bold mt-1">{members.length}</div>
+          </CardContent>
+        </Card>
+        <Card className="border border-border">
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">Active Tasks Assigned</div>
+            <div className="text-2xl font-bold mt-1">
+              {members.reduce((sum, m) => sum + m.activeTasks, 0)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border border-border">
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">Total Workload Hours</div>
+            <div className="text-2xl font-bold mt-1">
+              {members.reduce((sum, m) => sum + m.workloadHours, 0)}h
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border border-border">
+          <CardContent className="pt-4">
+            <div className="text-xs text-muted-foreground">Pending Invitations</div>
+            <div className="text-2xl font-bold mt-1">{invitations.length}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="members">
         <TabsList>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="teams">Teams</TabsTrigger>
-          <TabsTrigger value="roles">Roles</TabsTrigger>
-          <TabsTrigger value="invitations">Invitations</TabsTrigger>
+          <TabsTrigger value="members">Team Members ({members.length})</TabsTrigger>
+          <TabsTrigger value="invitations">Pending Invitations ({invitations.length})</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="users" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div className="flex items-center gap-4">
-                <SearchInput
-                  placeholder="Search users..."
+        <TabsContent value="members" className="mt-4 space-y-4">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-64">
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name or email..."
                   value={searchQuery}
-                  onChange={setSearchQuery}
-                  className="w-80"
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
                 />
               </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" leftIcon={<Filter className="h-4 w-4" />}>
-                  Filter
-                </Button>
-                <Button variant="secondary" size="sm" leftIcon={<Download className="h-4 w-4" />}>
-                  Export
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Department</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Projects</TableHead>
-                    <TableHead>Last Active</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-9 w-9 rounded-full bg-slate-200 flex items-center justify-center text-sm font-medium text-slate-600">
-                            {user.name.split(" ").map((n) => n[0]).join("")}
-                          </div>
-                          <div>
-                            <p className="font-medium text-slate-900">
-                              {user.name}
-                            </p>
-                            <p className="text-xs text-slate-500">
-                              {user.email}
-                            </p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{user.role}</TableCell>
-                      <TableCell>{user.department}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={user.status === "active" ? "success" : "default"}
-                          size="sm"
-                        >
-                          {user.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{user.projects}</TableCell>
-                      <TableCell className="text-sm text-slate-500">
-                        {user.lastActive}
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon-sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="teams" className="mt-6">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {teams.map((team) => (
-              <Card key={team.id}>
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="h-10 w-10 rounded-lg bg-slate-100 flex items-center justify-center">
-                      <Users className="h-5 w-5 text-slate-600" />
-                    </div>
-                    <Badge size="sm">{team.members}</Badge>
-                  </div>
-                  <h3 className="font-semibold text-slate-900 mt-3">
-                    {team.name}
-                  </h3>
-                  <p className="text-sm text-slate-500">Lead: {team.lead}</p>
-                </CardContent>
-              </Card>
-            ))}
+              <select
+                aria-label="Filter by Role"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-44 bg-card text-card-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="ALL">All Roles</option>
+                <option value="ADMIN">Admin</option>
+                <option value="PROJECT_MANAGER">Project Manager</option>
+                <option value="DEVELOPER">Developer</option>
+              </select>
+            </div>
           </div>
-        </TabsContent>
 
-        <TabsContent value="roles" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Roles & Permissions</CardTitle>
-              <Button variant="secondary" size="sm" leftIcon={<Shield className="h-4 w-4" />}>
-                Add Role
-              </Button>
-            </CardHeader>
+          {/* Members Table */}
+          <Card className="border border-border">
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Permissions</TableHead>
-                    <TableHead>Users</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {roles.map((role) => (
-                    <TableRow key={role.id}>
-                      <TableCell className="font-medium text-slate-900">
-                        {role.name}
-                      </TableCell>
-                      <TableCell>{role.permissions}</TableCell>
-                      <TableCell>
-                        <Badge size="sm">{role.users}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon-sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {loading ? (
+                <div className="flex justify-center p-12 text-muted-foreground">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              ) : filteredMembers.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-base font-semibold">No team members match your criteria</p>
+                  <p className="text-sm mt-1">Try resetting filters or invite a new member.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground text-left bg-muted/20">
+                        <th className="py-3 px-4 font-medium">Member</th>
+                        <th className="py-3 px-4 font-medium">Role</th>
+                        <th className="py-3 px-4 font-medium text-center">Active Tasks</th>
+                        <th className="py-3 px-4 font-medium text-center">Completed</th>
+                        <th className="py-3 px-4 font-medium text-right">Workload (Est)</th>
+                        <th className="py-3 px-4 font-medium">Current Sprint</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {filteredMembers.map((member) => (
+                        <tr key={member.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="font-semibold text-foreground">{member.name}</div>
+                            <div className="text-xs text-muted-foreground">{member.email}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge
+                              variant={
+                                member.role.toUpperCase() === "ADMIN"
+                                  ? "danger"
+                                  : member.role.toUpperCase() === "PROJECT_MANAGER"
+                                  ? "warning"
+                                  : "info"
+                              }
+                              className="text-[10px]"
+                            >
+                              {member.role.replace(/_/g, " ")}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="font-semibold">{member.activeTasks}</span>
+                            {member.blockedTasks > 0 && (
+                              <span className="ml-1 text-xs text-red-500 font-medium">
+                                ({member.blockedTasks} blocked)
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center text-muted-foreground">
+                            {member.completedTasks}
+                          </td>
+                          <td className="py-3 px-4 text-right font-mono font-medium">
+                            {member.workloadHours}h
+                          </td>
+                          <td className="py-3 px-4">
+                            {member.currentSprint ? (
+                              <Badge variant="outline" className="text-xs">
+                                <Calendar className="w-3 h-3 mr-1" />
+                                {member.currentSprint}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">None active</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="invitations" className="mt-6">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+        <TabsContent value="invitations" className="mt-4">
+          <Card className="border border-border">
+            <CardHeader className="pb-3">
               <CardTitle className="text-base">Pending Invitations</CardTitle>
+              <CardDescription>
+                Outstanding invites for developers or managers to join the organization
+              </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Sent</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invitations.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell className="font-medium text-slate-900">
-                        {inv.email}
-                      </TableCell>
-                      <TableCell>{inv.role}</TableCell>
-                      <TableCell>{inv.sent}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={inv.status === "pending" ? "warning" : "default"}
-                          size="sm"
-                        >
-                          {inv.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon-sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              {invitations.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Mail className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                  <p className="text-base font-semibold">No pending invitations</p>
+                  <p className="text-sm mt-1">Use the &quot;Invite Member&quot; button to invite new teammates.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted-foreground text-left bg-muted/20">
+                        <th className="py-3 px-4 font-medium">Email</th>
+                        <th className="py-3 px-4 font-medium">Role</th>
+                        <th className="py-3 px-4 font-medium">Created Date</th>
+                        <th className="py-3 px-4 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {invitations.map((inv) => (
+                        <tr key={inv.id} className="hover:bg-muted/30">
+                          <td className="py-3 px-4 font-medium">{inv.email}</td>
+                          <td className="py-3 px-4">
+                            <Badge variant="outline" className="text-xs">
+                              {inv.role}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-xs text-muted-foreground">
+                            {new Date(inv.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant="warning" className="text-[10px]">
+                              PENDING
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Invite Member Modal */}
+      <Modal
+        isOpen={isInviteOpen}
+        onClose={() => setIsInviteOpen(false)}
+        title="Invite New Team Member"
+        description="Generate a secure role-based invitation link"
+      >
+        {createdInviteUrl ? (
+          <div className="space-y-4 py-2">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-600 text-sm flex items-center gap-2">
+              <Check className="w-4 h-4" />
+              <span>Invitation successfully created!</span>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase">
+                Shareable Invitation URL
+              </label>
+              <div className="flex gap-2 mt-1">
+                <Input readOnly value={createdInviteUrl} className="font-mono text-xs" />
+                <Button variant="secondary" onClick={copyToClipboard}>
+                  {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Send this link to the invitee. When they open it, their account will be provisioned with the assigned role.
+              </p>
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="primary" onClick={() => setIsInviteOpen(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSendInvite} className="space-y-4 py-2">
+            {inviteError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-500 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                <span>{inviteError}</span>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase">
+                Email Address
+              </label>
+              <Input
+                type="email"
+                required
+                placeholder="developer@company.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase">
+                Assigned Role
+              </label>
+              <select
+                aria-label="Assigned Role"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as any)}
+                className="mt-1 w-full bg-card text-card-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="DEVELOPER">Developer</option>
+                <option value="PROJECT_MANAGER">Project Manager</option>
+              </select>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsInviteOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" disabled={inviting}>
+                {inviting ? "Generating..." : "Generate Invitation"}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </AuthenticatedLayout>
   );
 }

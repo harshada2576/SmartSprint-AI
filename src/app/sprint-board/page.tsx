@@ -38,13 +38,13 @@ import {
 } from "@/lib/api-client";
 import { Select } from "@/components/ui/Select";
 import { formatDate, formatRelativeTime } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 const SPRINTS_PAGE_SIZE = 50;
 // Bounded board fetch: one page of at most 100 tasks, grouped client-side by
 // column_status. Full server pagination still applies (see footer note).
 const BOARD_PAGE_SIZE = 100;
 
-// Kanban columns mirror the backend task statuses (see TASK_STATUSES).
 const COLUMNS = [
   { id: "backlog", title: "Backlog" },
   { id: "todo", title: "To Do" },
@@ -52,6 +52,7 @@ const COLUMNS = [
   { id: "review", title: "Review" },
   { id: "testing", title: "Testing" },
   { id: "done", title: "Done" },
+  { id: "blocked", title: "Blocked" },
 ];
 
 const MOVE_OPTIONS = COLUMNS.map((column) => ({
@@ -176,6 +177,35 @@ export default function SprintBoardPage() {
     });
   }, [tasks]);
 
+  // Realtime subscription: auto-update sprint board when tasks are changed by developers
+  React.useEffect(() => {
+    if (!selectedSprint?.id) return;
+    try {
+      const supabase = createClient();
+      const channel = supabase
+        .channel(`sprint-board-${selectedSprint.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "tasks",
+            filter: `sprint_id=eq.${selectedSprint.id}`,
+          },
+          () => {
+            retryTasks();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    } catch (err) {
+      console.warn("Realtime subscription fallback:", err);
+    }
+  }, [selectedSprint?.id, retryTasks]);
+
   const moveTaskStatus = React.useCallback(
     async (taskId: string, newStatus: string) => {
       const current =
@@ -188,7 +218,11 @@ export default function SprintBoardPage() {
         // `status` is the backend-accepted alias for `column_status`.
         await patchJson(
           `/api/tasks/${taskId}`,
-          { status: newStatus },
+          {
+            status: newStatus,
+            isBlocked: newStatus === "blocked",
+            ...(newStatus !== "blocked" ? { blockedReason: null } : {}),
+          },
           normalizeTask,
           { fallback: "Could not move task" },
         );

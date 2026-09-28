@@ -4,16 +4,32 @@ import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AuthenticatedLayout } from "@/components/layout/AuthenticatedLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import { PriorityChip } from "@/components/ui/StatusChip";
+import { PriorityChip, StatusChip } from "@/components/ui/StatusChip";
+import { Progress } from "@/components/ui/Progress";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { AlertCircle, ClipboardList } from "lucide-react";
+import { Modal } from "@/components/ui/Modal";
+import { useUser } from "@/lib/auth/use-user";
+import {
+  AlertCircle,
+  AlertTriangle,
+  ClipboardList,
+  CheckCircle2,
+  Clock,
+  MessageSquare,
+  Send,
+  User,
+  ArrowLeft,
+  Calendar,
+  Layers,
+  Sparkles,
+} from "lucide-react";
 import {
   ApiError,
   normalizeTask,
@@ -32,6 +48,7 @@ const STATUS_OPTIONS = [
   { value: "review", label: "Review" },
   { value: "testing", label: "Testing" },
   { value: "done", label: "Done" },
+  { value: "blocked", label: "Blocked" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -40,404 +57,679 @@ const PRIORITY_OPTIONS = [
   { value: "high", label: "High" },
 ];
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function fetchTaskById(id: string, signal: AbortSignal): Promise<TaskItem> {
-  let response: Response;
-  try {
-    response = await fetch(`/api/tasks/${id}`, {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    throw new ApiError(
-      "NETWORK_ERROR",
-      "Could not reach the server. Check your connection and try again.",
-    );
-  }
-  let payload: unknown = null;
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-  if (!response.ok) {
-    const message =
-      isRecord(payload) && isRecord(payload.error) && typeof payload.error.message === "string"
-        ? payload.error.message
-        : `Could not load task (HTTP ${response.status}).`;
-    if (response.status === 401) {
-      throw new ApiError("UNAUTHENTICATED", message, 401);
-    }
-    if (response.status === 404) {
-      throw new ApiError("NOT_FOUND", "Task not found.", 404);
-    }
-    throw new ApiError("INTERNAL_ERROR", message, response.status);
-  }
-  if (!isRecord(payload) || payload.success !== true) {
-    throw new ApiError(
-      "INTERNAL_ERROR",
-      "The server returned an unexpected response.",
-      response.status,
-    );
-  }
-  const task = normalizeTask(payload.data);
-  if (task === null) {
-    throw new ApiError(
-      "INTERNAL_ERROR",
-      "The server returned an unexpected response.",
-      response.status,
-    );
-  }
-  return task;
-}
-
-function readRouteId(params: unknown): string {
-  if (typeof params !== "object" || params === null) return "";
-  const id = (params as Record<string, unknown>).id;
-  if (typeof id === "string") return id;
-  if (Array.isArray(id) && typeof id[0] === "string") return id[0];
-  return "";
+interface CommentItem {
+  id: string;
+  taskId: string;
+  userId: string;
+  content: string;
+  createdAt: string;
+  authorName: string;
+  authorLastName: string;
+  authorEmail: string;
+  authorInitials: string;
 }
 
 export default function TaskDetailPage() {
   const router = useRouter();
   const routeParams = useParams<{ id: string }>();
-  const taskId = readRouteId(routeParams);
+  const taskId = typeof routeParams?.id === "string" ? routeParams.id : "";
   const idValid = taskId !== "" && UUID_RE.test(taskId);
 
-  const [attempt, setAttempt] = React.useState(0);
-  const requestKey = `${taskId}:${attempt}`;
-  const [snapshot, setSnapshot] = React.useState<{
-    key: string;
-    task: TaskItem | null;
-    error: ApiError | null;
-  } | null>(null);
+  const { role, user: currentUser } = useUser();
+  const isPM = role === "PROJECT_MANAGER" || role === "ADMIN";
 
-  React.useEffect(() => {
-    if (!idValid) return;
-    let cancelled = false;
-    const controller = new AbortController();
-    (async () => {
-      try {
-        const fetched = await fetchTaskById(taskId, controller.signal);
-        if (cancelled) return;
-        setSnapshot({ key: requestKey, task: fetched, error: null });
-      } catch (error) {
-        if (cancelled) return;
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        if (error instanceof ApiError && (error.code === "NOT_FOUND" || error.status === 404)) {
-          setSnapshot({ key: requestKey, task: null, error: null });
-          return;
-        }
-        setSnapshot({
-          key: requestKey,
-          task: null,
-          error:
-            error instanceof ApiError
-              ? error
-              : new ApiError("INTERNAL_ERROR", "Something went wrong loading the task."),
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-    // `requestKey` fully describes the request; `attempt` is folded into it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskId, requestKey]);
+  const [task, setTask] = React.useState<TaskItem | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
 
-  const retry = React.useCallback(() => {
-    setAttempt((count) => count + 1);
-  }, []);
-
-  const current = snapshot !== null && snapshot.key === requestKey ? snapshot : null;
-  const isLoading = idValid && current === null;
-  const error = current?.error ?? null;
-  const task = current?.task ?? null;
-
+  // Form states
   const [isEditing, setIsEditing] = React.useState(false);
   const [title, setTitle] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [priority, setPriority] = React.useState("medium");
   const [status, setStatus] = React.useState("backlog");
-  const [points, setPoints] = React.useState("");
-  const [assigneeId, setAssigneeId] = React.useState("");
-  const [sprintId, setSprintId] = React.useState("");
-  const [requirementId, setRequirementId] = React.useState("");
+  const [progressPercent, setProgressPercent] = React.useState(0);
+  const [estimatedHours, setEstimatedHours] = React.useState("");
+  const [actualHours, setActualHours] = React.useState("");
+  const [isBlocked, setIsBlocked] = React.useState(false);
+  const [blockedReason, setBlockedReason] = React.useState("");
   const [dueDate, setDueDate] = React.useState("");
-  const [prefilledFor, setPrefilledFor] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const [formError, setFormError] = React.useState<string | null>(null);
 
-  // Render-time prefill (React-endorsed "adjust state during render"
-  // pattern): runs when the row resolves or re-resolves after a refetch,
-  // keyed by task id + updatedAt so fresh server data wins. No effect needed.
-  const prefillKey = task !== null ? `${task.id}:${task.updatedAt}` : null;
-  if (task !== null && prefillKey !== null && prefilledFor !== prefillKey) {
-    setTitle(task.title);
-    setDescription(task.description ?? "");
-    setPriority(task.priority);
-    setStatus(task.columnStatus);
-    setPoints(task.points !== null ? String(task.points) : "");
-    setAssigneeId(task.assigneeId ?? "");
-    setSprintId(task.sprintId ?? "");
-    setRequirementId(task.requirementId ?? "");
-    setDueDate(task.dueDate ?? "");
-    setPrefilledFor(prefillKey);
-  }
+  // Blocker modal
+  const [blockModalOpen, setBlockModalOpen] = React.useState(false);
+  const [modalBlockReason, setModalBlockReason] = React.useState("");
 
-  async function handleUpdate(event: React.FormEvent) {
-    event.preventDefault();
-    if (!task) return;
-    setSaving(true);
-    setFormError(null);
-    // projectId is immutable on PATCH — never sent from the edit form.
-    const body: Record<string, unknown> = {
-      title: title.trim(),
-      description: description.trim() === "" ? null : description.trim(),
-      priority,
-      points: points.trim() === "" ? null : Number(points),
-      assigneeId: assigneeId.trim() === "" ? null : assigneeId.trim(),
-      sprintId: sprintId.trim() === "" ? null : sprintId.trim(),
-      requirementId:
-        requirementId.trim() === "" ? null : requirementId.trim(),
-      status,
-      dueDate: dueDate.trim() === "" ? null : dueDate.trim(),
-    };
+  // Comments state
+  const [comments, setComments] = React.useState<CommentItem[]>([]);
+  const [loadingComments, setLoadingComments] = React.useState(false);
+  const [newComment, setNewComment] = React.useState("");
+  const [postingComment, setPostingComment] = React.useState(false);
+
+  const fetchTask = React.useCallback(async () => {
+    if (!idValid) return;
     try {
-      const updated = await patchJson(`/api/tasks/${task.id}`, body, normalizeTask, {
-        fallback: "Could not update task",
+      setLoading(true);
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "no-store",
       });
-      if (updated !== null) {
-        setTitle(updated.title);
-        setDescription(updated.description ?? "");
-        setPriority(updated.priority);
-        setStatus(updated.columnStatus);
-        setPoints(updated.points !== null ? String(updated.points) : "");
-        setAssigneeId(updated.assigneeId ?? "");
-        setSprintId(updated.sprintId ?? "");
-        setRequirementId(updated.requirementId ?? "");
-        setDueDate(updated.dueDate ?? "");
-        setPrefilledFor(`${updated.id}:${updated.updatedAt}`);
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setError(json.error?.message ?? "Failed to load task");
+        return;
       }
-      setIsEditing(false);
-      retry();
-    } catch (updateError: unknown) {
-      setFormError(
-        updateError instanceof ApiError
-          ? updateError.message
-          : "Could not update task.",
-      );
+      const item = normalizeTask(json.data);
+      setTask(item);
+      if (item) {
+        setTitle(item.title);
+        setDescription(item.description ?? "");
+        setPriority(item.priority);
+        setStatus(item.columnStatus);
+        setProgressPercent(item.progressPercent ?? 0);
+        setEstimatedHours(item.estimatedHours ? String(item.estimatedHours) : "");
+        setActualHours(item.actualHours ? String(item.actualHours) : "");
+        setIsBlocked(item.isBlocked);
+        setBlockedReason(item.blockedReason ?? "");
+        setDueDate(item.dueDate ?? "");
+      }
+    } catch {
+      setError("Network error loading task");
+    } finally {
+      setLoading(false);
+    }
+  }, [taskId, idValid]);
+
+  const fetchComments = React.useCallback(async () => {
+    if (!idValid) return;
+    try {
+      setLoadingComments(true);
+      const res = await fetch(`/api/tasks/${taskId}/comments`);
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setComments(json.data);
+      }
+    } catch (err) {
+      console.error("Failed to load comments:", err);
+    } finally {
+      setLoadingComments(false);
+    }
+  }, [taskId, idValid]);
+
+  React.useEffect(() => {
+    fetchTask();
+    fetchComments();
+  }, [fetchTask, fetchComments]);
+
+  const handleQuickStatus = async (newStatus: string) => {
+    if (!task) return;
+    try {
+      setSaving(true);
+      const patchData: Record<string, unknown> = {
+        columnStatus: newStatus,
+        status: newStatus,
+      };
+      if (newStatus === "done") {
+        patchData.progressPercent = 100;
+        patchData.isBlocked = false;
+      } else if (newStatus === "inProgress" && task.progressPercent === 0) {
+        patchData.progressPercent = 25;
+      }
+
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patchData),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await fetchTask();
+      } else {
+        alert(data.error?.message ?? "Failed to update task");
+      }
+    } catch {
+      alert("Network error while updating task");
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleMarkBlockedSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!task || !modalBlockReason.trim()) return;
+
+    try {
+      setSaving(true);
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isBlocked: true,
+          blockedReason: modalBlockReason.trim(),
+          columnStatus: "blocked",
+          status: "blocked",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setBlockModalOpen(false);
+        setModalBlockReason("");
+        await fetchTask();
+      } else {
+        alert(data.error?.message ?? "Failed to mark task blocked");
+      }
+    } catch {
+      alert("Network error while marking task blocked");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!task) return;
+    try {
+      setSaving(true);
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          isBlocked: false,
+          blockedReason: null,
+          columnStatus: "inProgress",
+          status: "inProgress",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await fetchTask();
+      }
+    } catch {
+      alert("Network error unblocking task");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!task) return;
+
+    try {
+      setSaving(true);
+      const body: Record<string, unknown> = {
+        title: title.trim(),
+        description: description.trim() === "" ? null : description.trim(),
+        priority,
+        columnStatus: status,
+        status,
+        progressPercent: Number(progressPercent),
+        estimatedHours: estimatedHours.trim() === "" ? null : Number(estimatedHours),
+        actualHours: actualHours.trim() === "" ? null : Number(actualHours),
+        dueDate: dueDate.trim() === "" ? null : dueDate.trim(),
+      };
+
+      const res = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setIsEditing(false);
+        await fetchTask();
+      } else {
+        alert(data.error?.message ?? "Failed to save task");
+      }
+    } catch {
+      alert("Network error saving task");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+
+    try {
+      setPostingComment(true);
+      const res = await fetch(`/api/tasks/${taskId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newComment.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setNewComment("");
+        fetchComments();
+      } else {
+        alert(data.error?.message ?? "Failed to post comment");
+      }
+    } catch {
+      alert("Network error posting comment");
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  if (!idValid) {
+    return (
+      <AuthenticatedLayout>
+        <Card className="p-6">
+          <EmptyState
+            icon={AlertCircle}
+            title="Invalid Task ID"
+            description="The task ID in the URL must be a valid UUID."
+            action={{ label: "Back to Execution", onClick: () => router.push("/execution") }}
+          />
+        </Card>
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (loading) {
+    return (
+      <AuthenticatedLayout>
+        <div className="space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-48 w-full" />
+        </div>
+      </AuthenticatedLayout>
+    );
+  }
+
+  if (error || !task) {
+    return (
+      <AuthenticatedLayout>
+        <Card className="p-6">
+          <EmptyState
+            icon={AlertCircle}
+            title="Task Not Found"
+            description={error ?? "Could not load the requested task."}
+            action={{ label: "Back to Execution", onClick: () => router.push("/execution") }}
+          />
+        </Card>
+      </AuthenticatedLayout>
+    );
   }
 
   return (
     <AuthenticatedLayout>
+      <div className="mb-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-xs text-slate-500 hover:text-slate-900 -ml-2"
+          onClick={() => router.back()}
+        >
+          <ArrowLeft className="h-3.5 w-3.5 mr-1" />
+          Back
+        </Button>
+      </div>
+
       <PageHeader
-        title={task?.title ?? "Task detail"}
-        description={task ? task.displayId : "Loading task…"}
-        breadcrumb={[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: "Tasks", href: "/tasks" },
-          { label: task?.displayId ?? "Detail" },
-        ]}
-      >
-        <div className="mt-4">
-          <Button variant="secondary" onClick={() => router.push("/tasks")}>
-            Back to tasks
+        title={task.title}
+        description={`${task.displayId} • ${task.priority.toUpperCase()} priority • Status: ${task.columnStatus}`}
+        primaryAction={
+          !isEditing
+            ? {
+                label: "Edit Task",
+                onClick: () => setIsEditing(true),
+              }
+            : undefined
+        }
+      />
+
+      {/* Blocker Alert Banner */}
+      {task.isBlocked && (
+        <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-900">Task is Blocked</p>
+              <p className="text-xs text-red-700 mt-0.5">
+                {task.blockedReason ? task.blockedReason : "No specific reason provided."}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-red-200 text-red-700 hover:bg-red-100 self-start sm:self-auto text-xs"
+            onClick={handleUnblock}
+            disabled={saving}
+          >
+            Resolve Blocker
           </Button>
         </div>
-      </PageHeader>
+      )}
 
-      {!idValid ? (
-        <Card>
-          <CardContent className="p-6">
-            <EmptyState
-              icon={AlertCircle}
-              title="Invalid task ID"
-              description="The task ID in the URL must be a valid UUID."
-              action={{ label: "Back to tasks", onClick: () => router.push("/tasks") }}
-            />
-          </CardContent>
-        </Card>
-      ) : isLoading ? (
-        <Card>
-          <CardContent className="p-6 space-y-3">
-            <Skeleton className="h-4 w-3/4" />
-            <Skeleton className="h-3 w-1/2" />
-          </CardContent>
-        </Card>
-      ) : error !== null ? (
-        <Card>
-          <CardContent className="p-6">
-            <EmptyState
-              icon={AlertCircle}
-              title="Couldn't load task"
-              description={error.message}
-              action={{ label: "Try again", onClick: retry }}
-            />
-          </CardContent>
-        </Card>
-      ) : task === null ? (
-        <Card>
-          <CardContent className="p-6">
-            <EmptyState
-              icon={ClipboardList}
-              title="Task not found"
-              description="This task does not exist or you do not have access to it."
-              action={{ label: "Back to tasks", onClick: () => router.push("/tasks") }}
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge
-                variant={
-                  task.columnStatus === "done"
-                    ? "success"
-                    : task.columnStatus === "inProgress"
-                      ? "info"
-                      : "default"
-                }
-                size="sm"
-              >
-                {task.columnStatus}
-              </Badge>
-              <PriorityChip priority={task.priority} size="sm" />
-              <span className="text-xs text-slate-500">
-                {task.points ?? "—"}
-                {task.points !== null ? " pts" : ""}
-              </span>
-            </div>
-            {task.description ? (
-              <p className="text-sm text-slate-600 mb-4">{task.description}</p>
-            ) : null}
-            <dl className="text-sm space-y-2 mb-6">
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Due</dt>
-                <dd className="text-slate-900">
-                  {task.dueDate ? formatDate(task.dueDate) : "—"}
-                </dd>
+      {/* Quick Developer Action Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 mb-6 p-3 bg-white border border-slate-200 rounded-xl shadow-sm">
+        <span className="text-xs font-semibold text-slate-500 mr-2">Quick Actions:</span>
+
+        {task.columnStatus !== "inProgress" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => handleQuickStatus("inProgress")}
+            disabled={saving}
+          >
+            Start Working
+          </Button>
+        )}
+
+        {task.columnStatus !== "review" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs"
+            onClick={() => handleQuickStatus("review")}
+            disabled={saving}
+          >
+            Ready for Review
+          </Button>
+        )}
+
+        {task.columnStatus !== "done" && (
+          <Button
+            size="sm"
+            className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+            onClick={() => handleQuickStatus("done")}
+            disabled={saving}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+            Mark Done
+          </Button>
+        )}
+
+        {!task.isBlocked && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-xs border-red-200 text-red-600 hover:bg-red-50 ml-auto"
+            onClick={() => {
+              setModalBlockReason("");
+              setBlockModalOpen(true);
+            }}
+          >
+            <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+            Mark Blocked
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content Column */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Task Info / Edit Card */}
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Details & Specifications</CardTitle>
+                <CardDescription>Comprehensive assignment parameters</CardDescription>
               </div>
-              <div className="flex justify-between">
-                <dt className="text-slate-500">Updated</dt>
-                <dd className="text-slate-900">
-                  {task.updatedAt
-                    ? formatRelativeTime(task.updatedAt)
-                    : "—"}
-                </dd>
+              <div className="flex items-center gap-2">
+                <PriorityChip priority={task.priority} />
+                <StatusChip status={task.columnStatus} />
               </div>
-            </dl>
-            {!isEditing ? (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  setIsEditing(true);
-                  setFormError(null);
-                }}
-              >
-                Edit task
-              </Button>
-            ) : (
-              <form onSubmit={handleUpdate}>
-                {formError !== null ? (
-                  <p className="text-sm text-rose-600 mb-4">{formError}</p>
-                ) : null}
-                <div className="space-y-4 mb-4">
-                  <Input
-                    label="Title"
-                    required
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                  />
-                  <Textarea
-                    label="Description"
-                    rows={3}
-                    value={description}
-                    onChange={(event) => setDescription(event.target.value)}
-                  />
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <Select
-                      label="Priority"
-                      options={PRIORITY_OPTIONS}
-                      value={priority}
-                      onChange={(event) => setPriority(event.target.value)}
-                    />
-                    <Select
-                      label="Status"
-                      options={STATUS_OPTIONS}
-                      value={status}
-                      onChange={(event) => setStatus(event.target.value)}
+            </CardHeader>
+            <CardContent>
+              {isEditing ? (
+                <form onSubmit={handleUpdate} className="space-y-4 pt-2">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Title</label>
+                    <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Description</label>
+                    <Textarea
+                      rows={4}
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Add task context or acceptance criteria..."
                     />
                   </div>
-                  <div className="grid sm:grid-cols-2 gap-4">
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
+                      <Select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        options={STATUS_OPTIONS}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Priority</label>
+                      <Select
+                        value={priority}
+                        onChange={(e) => setPriority(e.target.value)}
+                        options={PRIORITY_OPTIONS}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">
+                        Progress ({progressPercent}%)
+                      </label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        value={progressPercent}
+                        onChange={(e) => setProgressPercent(Number(e.target.value))}
+                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Est. Hours</label>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        value={estimatedHours}
+                        onChange={(e) => setEstimatedHours(e.target.value)}
+                        placeholder="8"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700 mb-1">Actual Hours</label>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        value={actualHours}
+                        onChange={(e) => setActualHours(e.target.value)}
+                        placeholder="6.5"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-700 mb-1">Due Date</label>
                     <Input
-                      label="Points"
-                      type="number"
-                      min={0}
-                      value={points}
-                      onChange={(event) => setPoints(event.target.value)}
-                    />
-                    <Input
-                      label="Due date"
                       type="date"
                       value={dueDate}
-                      onChange={(event) => setDueDate(event.target.value)}
+                      onChange={(e) => setDueDate(e.target.value)}
                     />
                   </div>
-                  <Input
-                    label="Assignee ID"
-                    placeholder="User UUID (empty to unassign)"
-                    value={assigneeId}
-                    onChange={(event) => setAssigneeId(event.target.value)}
-                  />
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <Input
-                      label="Sprint ID"
-                      placeholder="Sprint UUID"
-                      value={sprintId}
-                      onChange={(event) => setSprintId(event.target.value)}
-                    />
-                    <Input
-                      label="Requirement ID"
-                      placeholder="Requirement UUID"
-                      value={requirementId}
-                      onChange={(event) => setRequirementId(event.target.value)}
-                    />
+
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                    <Button type="button" variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" size="sm" disabled={saving}>
+                      {saving ? "Saving..." : "Save Changes"}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="space-y-6">
+                  <div>
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                      Description
+                    </span>
+                    <p className="text-sm text-slate-800 whitespace-pre-wrap mt-1">
+                      {task.description ? task.description : "No description provided."}
+                    </p>
+                  </div>
+
+                  {/* Progress Display */}
+                  <div className="p-4 bg-slate-50 rounded-xl space-y-2 border border-slate-100">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-slate-700">Completion Progress</span>
+                      <span className="font-bold text-slate-900">{task.progressPercent ?? 0}%</span>
+                    </div>
+                    <Progress value={task.progressPercent ?? 0} />
+                    <div className="flex justify-between items-center text-xs text-slate-500 pt-1">
+                      <span>Estimated: {task.estimatedHours ? `${task.estimatedHours} hrs` : "—"}</span>
+                      <span>Actual: {task.actualHours ? `${task.actualHours} hrs` : "—"}</span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex gap-3">
-                  <Button type="submit" disabled={saving}>
-                    {saving ? "Saving…" : "Save changes"}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setFormError(null);
-                    }}
-                  >
-                    Cancel
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Comments Section */}
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-slate-600" />
+                  Discussion & Updates ({comments.length})
+                </CardTitle>
+                <CardDescription>Collaborative developer notes and status updates</CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Comment Input */}
+              <form onSubmit={handlePostComment} className="space-y-2">
+                <Textarea
+                  rows={3}
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Share progress update, paste logs, or note dependencies..."
+                  required
+                />
+                <div className="flex justify-end">
+                  <Button type="submit" size="sm" disabled={postingComment || !newComment.trim()}>
+                    <Send className="h-3.5 w-3.5 mr-1.5" />
+                    {postingComment ? "Posting..." : "Post Comment"}
                   </Button>
                 </div>
               </form>
-            )}
-          </CardContent>
-        </Card>
-      )}
+
+              {/* Comment Thread */}
+              <div className="divide-y divide-slate-100 pt-2">
+                {loadingComments ? (
+                  <p className="text-xs text-slate-400 py-3 text-center">Loading discussion...</p>
+                ) : comments.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-4 text-center">
+                    No comments yet. Start the conversation!
+                  </p>
+                ) : (
+                  comments.map((c) => (
+                    <div key={c.id} className="py-3 flex items-start gap-3">
+                      <div className="h-8 w-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-semibold text-xs flex-shrink-0 mt-0.5">
+                        {c.authorInitials || "U"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-semibold text-xs text-slate-900">
+                            {c.authorName} {c.authorLastName}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {formatRelativeTime(c.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                          {c.content}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Sidebar Metadata */}
+        <div className="space-y-6">
+          <Card className="border-slate-200">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-semibold">Properties</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-xs">
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Story Points</span>
+                <span className="font-semibold text-slate-800">{task.points ?? "—"} pts</span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Due Date</span>
+                <span className="font-semibold text-slate-800">
+                  {task.dueDate ? formatDate(task.dueDate) : "No due date"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Sprint</span>
+                <span className="font-semibold text-slate-800">
+                  {task.sprintId ? "Assigned" : "Backlog"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5 border-b border-slate-100">
+                <span className="text-slate-500">Created</span>
+                <span className="text-slate-600">
+                  {task.createdAt ? formatDate(task.createdAt) : "—"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1.5">
+                <span className="text-slate-500">Last Updated</span>
+                <span className="text-slate-600">
+                  {task.updatedAt ? formatRelativeTime(task.updatedAt) : "—"}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Mark Blocked Modal */}
+      <Modal
+        isOpen={blockModalOpen}
+        onClose={() => setBlockModalOpen(false)}
+        title="Mark Task Blocked"
+        description="Explain what external dependency, credential, or review is impeding progress."
+      >
+        <form onSubmit={handleMarkBlockedSubmit} className="space-y-4 pt-2">
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              Blocker Reason / Impediment
+            </label>
+            <Textarea
+              rows={3}
+              required
+              value={modalBlockReason}
+              onChange={(e) => setModalBlockReason(e.target.value)}
+              placeholder="e.g. Waiting for Stripe API webhook credentials from client..."
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={() => setBlockModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="danger" disabled={saving || !modalBlockReason.trim()}>
+              {saving ? "Flagging..." : "Confirm Blocked"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </AuthenticatedLayout>
   );
 }

@@ -4,11 +4,11 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useUser } from "@/lib/auth/use-user";
 import {
   LayoutDashboard,
   FolderKanban,
   FileText,
-  Sparkles,
   ListTodo,
   CalendarDays,
   Users,
@@ -19,10 +19,14 @@ import {
   ChevronLeft,
   Briefcase,
   Target,
-  FileStack,
   Layers,
   Zap,
-  ClipboardList,
+  Bot,
+  AlertTriangle,
+  Building,
+  Activity,
+  ShieldAlert,
+  UserCheck,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -34,107 +38,61 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ElementType;
-  children?: { label: string; href: string }[];
 }
 
-const mainNavItems: NavItem[] = [
+const PM_NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Projects", href: "/projects", icon: FolderKanban },
-];
-
-const projectNavItems: NavItem[] = [
-  {
-    label: "Requirements",
-    href: "/requirements",
-    icon: FileText,
-  },
-  {
-    label: "AI Recommendations",
-    href: "/ai-recommendations",
-    icon: Sparkles,
-  },
-  {
-    label: "Product Backlog",
-    href: "/backlog",
-    icon: ListTodo,
-  },
-  {
-    label: "Sprint Planning",
-    href: "/sprint-planning",
-    icon: CalendarDays,
-  },
-  {
-    label: "Sprint Board",
-    href: "/sprint-board",
-    icon: Layers,
-  },
-  {
-    label: "Execution",
-    href: "/execution",
-    icon: Zap,
-  },
-];
-
-const managementNavItems: NavItem[] = [
+  { label: "Requirements", href: "/requirements", icon: FileText },
+  { label: "Backlog", href: "/backlog", icon: ListTodo },
+  { label: "Sprint Planning", href: "/sprint-planning", icon: CalendarDays },
+  { label: "Sprint Board", href: "/sprint-board", icon: Layers },
+  { label: "Team", href: "/team", icon: Users },
+  { label: "Risks", href: "/risks", icon: AlertTriangle },
+  { label: "AI Assistant", href: "/ai-assistant", icon: Bot },
   { label: "Monitoring", href: "/monitoring", icon: Target },
   { label: "Reports", href: "/reports", icon: BarChart3 },
-  { label: "Documents", href: "/documents", icon: FileStack },
-  { label: "Governance", href: "/governance", icon: ClipboardList },
+  { label: "Notifications", href: "/notifications", icon: Bell },
 ];
 
-const systemNavItems: NavItem[] = [
+const DEVELOPER_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "My Tasks", href: "/execution", icon: Zap },
+  { label: "My Sprint", href: "/sprint-board", icon: CalendarDays },
+  { label: "Assigned Projects", href: "/projects", icon: FolderKanban },
+  { label: "Sprint Board", href: "/sprint-board", icon: Layers },
+  { label: "AI Assistant", href: "/ai-assistant", icon: Bot },
   { label: "Notifications", href: "/notifications", icon: Bell },
-  { label: "Team", href: "/team", icon: Users },
+];
+
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Organizations", href: "/admin/organizations", icon: Building },
+  { label: "System Activity", href: "/admin/activity", icon: Activity },
+  { label: "Audit Logs", href: "/admin/audit", icon: ShieldAlert },
+  { label: "Projects", href: "/projects", icon: FolderKanban },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
-function NavSection({
-  title,
-  items,
-  isCollapsed,
-}: {
-  title: string;
-  items: NavItem[];
-  isCollapsed: boolean;
-}) {
-  const pathname = usePathname();
-
-  return (
-    <div className="mb-6">
-      {!isCollapsed && (
-        <h3 className="px-3 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          {title}
-        </h3>
-      )}
-      <nav className="space-y-1">
-        {items.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                isActive
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-                isCollapsed && "justify-center px-2"
-              )}
-              title={isCollapsed ? item.label : undefined}
-            >
-              <Icon className={cn("h-5 w-5", isCollapsed && "h-5 w-5")} />
-              {!isCollapsed && <span>{item.label}</span>}
-            </Link>
-          );
-        })}
-      </nav>
-    </div>
-  );
-}
-
 export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
+  const pathname = usePathname();
+  const { role, isLoading, organization } = useUser();
+
+  const navItems = React.useMemo(() => {
+    if (role === "ADMIN") return ADMIN_NAV_ITEMS;
+    if (role === "DEVELOPER") return DEVELOPER_NAV_ITEMS;
+    // Default to Project Manager
+    return PM_NAV_ITEMS;
+  }, [role]);
+
+  const roleLabel = React.useMemo(() => {
+    if (isLoading) return "Loading...";
+    if (role === "ADMIN") return "Administrator";
+    if (role === "DEVELOPER") return "Developer";
+    return "Project Manager";
+  }, [role, isLoading]);
+
   return (
     <aside
       className={cn(
@@ -145,44 +103,61 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
       {/* Logo */}
       <div
         className={cn(
-          "h-16 flex items-center border-b border-slate-200 px-4",
+          "h-16 flex items-center border-b border-slate-200 px-4 justify-between",
           isCollapsed && "justify-center px-2"
         )}
       >
-        <div className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-slate-900 flex items-center justify-center flex-shrink-0">
             <Briefcase className="h-4 w-4 text-white" />
           </div>
           {!isCollapsed && (
-            <span className="font-semibold text-slate-900 text-sm">
-              SmartSprint
-            </span>
+            <div className="flex flex-col">
+              <span className="font-semibold text-slate-900 text-sm leading-tight">
+                SmartSprint AI
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                {organization?.name ?? "Workspace"}
+              </span>
+            </div>
           )}
-        </div>
+        </Link>
       </div>
 
+      {/* Role Indicator */}
+      {!isCollapsed && (
+        <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
+          <UserCheck className="h-3.5 w-3.5 text-blue-600" />
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            {roleLabel}
+          </span>
+        </div>
+      )}
+
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-4 px-3">
-        <NavSection
-          title="Workspace"
-          items={mainNavItems}
-          isCollapsed={isCollapsed}
-        />
-        <NavSection
-          title="Project"
-          items={projectNavItems}
-          isCollapsed={isCollapsed}
-        />
-        <NavSection
-          title="Management"
-          items={managementNavItems}
-          isCollapsed={isCollapsed}
-        />
-        <NavSection
-          title="System"
-          items={systemNavItems}
-          isCollapsed={isCollapsed}
-        />
+      <div className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(`${item.href}/`));
+          const Icon = item.icon;
+
+          return (
+            <Link
+              key={item.label + item.href}
+              href={item.href}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
+                isActive
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                isCollapsed && "justify-center px-2"
+              )}
+              title={isCollapsed ? item.label : undefined}
+            >
+              <Icon className="h-4 w-4 flex-shrink-0" />
+              {!isCollapsed && <span>{item.label}</span>}
+            </Link>
+          );
+        })}
       </div>
 
       {/* Toggle Button */}

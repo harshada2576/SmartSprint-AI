@@ -31,7 +31,9 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
+import { AiProjectBreakdownModal } from "@/components/ai/AiProjectBreakdownModal";
 import {
   buildQuery,
   normalizeProject,
@@ -106,6 +108,7 @@ export default function ProjectsPage() {
     return counts.byStatus[value];
   };
 
+  const [isBreakdownOpen, setIsBreakdownOpen] = React.useState(false);
   const showLoading = isLoading && projects.length === 0;
 
   return (
@@ -114,20 +117,31 @@ export default function ProjectsPage() {
         title="Projects"
         description="Manage all your software projects"
         breadcrumb={[{ label: "Dashboard", href: "/dashboard" }, { label: "Projects" }]}
-        primaryAction={{
-          label: "Create Project",
-          onClick: () => router.push("/projects/create"),
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={() => setIsBreakdownOpen(true)}
+              className="bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 flex items-center gap-2 font-medium"
+            >
+              <Sparkles className="w-4 h-4 text-primary" />
+              AI Project Breakdown
+            </Button>
+            <Button
+              onClick={() => router.push("/projects/create")}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground flex items-center gap-2"
+            >
+              Create Project
+            </Button>
+          </div>
+        }
+      />
+
+      <AiProjectBreakdownModal
+        isOpen={isBreakdownOpen}
+        onClose={() => {
+          setIsBreakdownOpen(false);
+          retry();
         }}
-        secondaryActions={[
-          {
-            label: "Import",
-            onClick: () => {},
-          },
-          {
-            label: "Export",
-            onClick: () => {},
-          },
-        ]}
       />
 
       {/* Filters */}
