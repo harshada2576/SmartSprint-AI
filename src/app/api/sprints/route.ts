@@ -119,6 +119,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
+    if (!parsed.value.createdBy) {
+      parsed.value.createdBy = context.user.id;
+    }
     const result = await createSprint(
       context.supabase,
       scope,

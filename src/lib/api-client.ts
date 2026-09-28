@@ -649,6 +649,8 @@ export interface SprintItem {
   endDate: string | null;
   totalPoints: number | null;
   completedPoints: number | null;
+  capacityPoints: number | null;
+  capacityHours: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -666,6 +668,8 @@ export function normalizeSprint(value: unknown): SprintItem | null {
     endDate: toNullableString(value.end_date),
     totalPoints: toNullableNumber(value.total_points),
     completedPoints: toNullableNumber(value.completed_points),
+    capacityPoints: toNullableNumber(value.capacity_points ?? value.capacityPoints ?? value.total_points),
+    capacityHours: toNullableNumber(value.capacity_hours ?? value.capacityHours),
     createdAt: toStringOr(value.created_at, ""),
     updatedAt: toStringOr(value.updated_at, ""),
   };
@@ -682,9 +686,15 @@ export interface TaskItem {
   priority: string;
   points: number | null;
   assigneeId: string | null;
-  /** Backend `column_status` (backlog/todo/inProgress/review/testing/done). */
+  /** Backend `column_status` (backlog/todo/inProgress/review/testing/done/blocked). */
   columnStatus: string;
   dueDate: string | null;
+  progressPercent: number;
+  estimatedHours: number | null;
+  actualHours: number | null;
+  isBlocked: boolean;
+  blockedReason: string | null;
+  blockedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -705,6 +715,12 @@ export function normalizeTask(value: unknown): TaskItem | null {
     assigneeId: toNullableString(value.assignee_id),
     columnStatus: toStringOr(value.column_status, toStringOr(value.status, "backlog")),
     dueDate: toNullableString(value.due_date),
+    progressPercent: toNumberOr(value.progress_percent ?? value.progressPercent, 0),
+    estimatedHours: toNullableNumber(value.estimated_hours ?? value.estimatedHours),
+    actualHours: toNullableNumber(value.actual_hours ?? value.actualHours),
+    isBlocked: value.is_blocked === true || value.isBlocked === true || value.column_status === "blocked",
+    blockedReason: toNullableString(value.blocked_reason ?? value.blockedReason),
+    blockedAt: toNullableString(value.blocked_at ?? value.blockedAt),
     createdAt: toStringOr(value.created_at, ""),
     updatedAt: toStringOr(value.updated_at, ""),
   };
