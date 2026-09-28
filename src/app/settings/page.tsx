@@ -22,6 +22,58 @@ import {
 
 export default function SettingsPage() {
   const router = useRouter();
+  void router;
+  const [theme, setTheme] = React.useState<string>("light");
+  const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(false);
+  const [notifPrefs, setNotifPrefs] = React.useState<Record<string, { email: boolean; push: boolean }>>({});
+  const [prefsLoaded, setPrefsLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    fetch("/api/settings", { method: "GET" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (cancelled || !payload?.success) return;
+        const data = payload.data as {
+          theme?: string;
+          sidebarCollapsed?: boolean;
+          notificationPreferences?: Record<string, { email: boolean; push: boolean }>;
+        };
+        if (typeof data.theme === "string") setTheme(data.theme);
+        if (typeof data.sidebarCollapsed === "boolean") setSidebarCollapsed(data.sidebarCollapsed);
+        if (data.notificationPreferences && typeof data.notificationPreferences === "object") {
+          setNotifPrefs(data.notificationPreferences);
+        }
+        setPrefsLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) setPrefsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const persistPrefs = React.useCallback(
+    (patch: Record<string, unknown>) => {
+      fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }).catch(() => {});
+    },
+    [],
+  );
+
+  const NOTIF_ROWS = [
+    { key: "task_assignments", label: "Task assignments", email: true, push: true },
+    { key: "sprint_updates", label: "Sprint updates", email: true, push: false },
+    { key: "document_uploads", label: "Document uploads", email: false, push: true },
+    { key: "approval_requests", label: "Approval requests", email: true, push: true },
+    { key: "budget_alerts", label: "Budget alerts", email: true, push: false },
+    { key: "system_updates", label: "System updates", email: false, push: false },
+  ];
+  void prefsLoaded;
 
   return (
     <AuthenticatedLayout>
@@ -97,18 +149,30 @@ export default function SettingsPage() {
                   Theme
                 </label>
                 <div className="grid grid-cols-3 gap-4">
-                  <button className="p-4 rounded-lg border-2 border-slate-900 bg-white text-center">
-                    <div className="h-12 bg-white border border-slate-200 rounded mb-2" />
-                    <span className="text-sm font-medium">Light</span>
-                  </button>
-                  <button className="p-4 rounded-lg border border-slate-200 bg-white text-center hover:border-slate-300">
-                    <div className="h-12 bg-slate-900 border border-slate-700 rounded mb-2" />
-                    <span className="text-sm">Dark</span>
-                  </button>
-                  <button className="p-4 rounded-lg border border-slate-200 bg-white text-center hover:border-slate-300">
-                    <div className="h-12 bg-gradient-to-r from-white to-slate-900 border border-slate-200 rounded mb-2" />
-                    <span className="text-sm">System</span>
-                  </button>
+                  {(
+                    [
+                      { value: "light", label: "Light" },
+                      { value: "dark", label: "Dark" },
+                      { value: "system", label: "System" },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        setTheme(option.value);
+                        persistPrefs({ theme: option.value });
+                      }}
+                      className={
+                        theme === option.value
+                          ? "p-4 rounded-lg border-2 border-slate-900 bg-white text-center"
+                          : "p-4 rounded-lg border border-slate-200 bg-white text-center hover:border-slate-300"
+                      }
+                    >
+                      <div className="h-12 bg-white border border-slate-200 rounded mb-2" />
+                      <span className="text-sm font-medium">{option.label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div>
@@ -120,13 +184,26 @@ export default function SettingsPage() {
                     <input
                       type="radio"
                       name="sidebar"
-                      defaultChecked
+                      checked={!sidebarCollapsed}
+                      onChange={() => {
+                        setSidebarCollapsed(false);
+                        persistPrefs({ sidebarCollapsed: false });
+                      }}
                       className="text-slate-900"
                     />
                     <span className="text-sm">Expanded</span>
                   </label>
                   <label className="flex items-center gap-2">
-                    <input type="radio" name="sidebar" className="text-slate-900" />
+                    <input
+                      type="radio"
+                      name="sidebar"
+                      checked={sidebarCollapsed}
+                      onChange={() => {
+                        setSidebarCollapsed(true);
+                        persistPrefs({ sidebarCollapsed: true });
+                      }}
+                      className="text-slate-900"
+                    />
                     <span className="text-sm">Collapsed</span>
                   </label>
                 </div>
@@ -147,41 +224,50 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {[
-                { label: "Task assignments", email: true, push: true },
-                { label: "Sprint updates", email: true, push: false },
-                { label: "Document uploads", email: false, push: true },
-                { label: "Approval requests", email: true, push: true },
-                { label: "Budget alerts", email: true, push: false },
-                { label: "System updates", email: false, push: false },
-              ].map((item, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0"
-                >
-                  <span className="text-sm font-medium text-slate-900">
-                    {item.label}
-                  </span>
-                  <div className="flex items-center gap-6">
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        defaultChecked={item.email}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      Email
-                    </label>
-                    <label className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        defaultChecked={item.push}
-                        className="rounded border-slate-300 text-slate-900"
-                      />
-                      Push
-                    </label>
+              {NOTIF_ROWS.map((item) => {
+                const stored = notifPrefs[item.key];
+                const email = stored?.email ?? item.email;
+                const push = stored?.push ?? item.push;
+                const update = (next: { email: boolean; push: boolean }) => {
+                  const merged = { ...notifPrefs, [item.key]: next };
+                  setNotifPrefs(merged);
+                  persistPrefs({ notificationPreferences: merged });
+                };
+                return (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0"
+                  >
+                    <span className="text-sm font-medium text-slate-900">
+                      {item.label}
+                    </span>
+                    <div className="flex items-center gap-6">
+                      <label className="flex items-center gap-2 text-sm text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={email}
+                          onChange={(event) =>
+                            update({ email: event.target.checked, push })
+                          }
+                          className="rounded border-slate-300 text-slate-900"
+                        />
+                        Email
+                      </label>
+                      <label className="flex items-center gap-2 text-sm text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={push}
+                          onChange={(event) =>
+                            update({ email, push: event.target.checked })
+                          }
+                          className="rounded border-slate-300 text-slate-900"
+                        />
+                        Push
+                      </label>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="flex justify-end pt-4">
                 <Button leftIcon={<Save className="h-4 w-4" />}>Save Changes</Button>
               </div>

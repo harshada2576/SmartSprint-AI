@@ -4,14 +4,20 @@ import {
   resolveRequestScope,
 } from "@/api/auth";
 import { parseRequirementsQuery } from "@/schemas/list-queries";
-import { listRequirements } from "@/services/requirement.service";
+import { parseRequirementCreateBody } from "@/schemas/requirement-mutations";
 import {
-  buildPaginationMeta,
-  internalError,
-  notFound,
-  success,
-  validationError,
-} from "@/utils/api-response";
+  createRequirement,
+  listRequirements,
+} from "@/services/requirement.service";
+import {
+  createdResponse,
+  internalErrorResponse,
+  mutationFailureResponse,
+  notFoundResponse,
+  successResponse,
+  validationErrorResponse,
+} from "@/api/response";
+import { buildPaginationMeta } from "@/api/pagination";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +39,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     auth = await requireAuthenticatedContext(request);
   } catch (error) {
     console.error("GET /api/requirements auth failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
   if (!auth.ok) {
     return auth.response;
@@ -45,12 +51,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     scope = await resolveRequestScope(context.supabase, context.user.id);
   } catch (error) {
     console.error("GET /api/requirements scope failed:", error);
-    return internalError();
+    return internalErrorResponse();
   }
 
   const parsed = parseRequirementsQuery(request.nextUrl.searchParams);
   if (!parsed.ok) {
-    return validationError(parsed.details);
+    return validationErrorResponse(parsed.details);
   }
 
   try {
@@ -60,11 +66,80 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       parsed.value,
     );
     if (result === null) {
-      return notFound("Project not found");
+      return notFoundResponse("Project not found");
     }
-    return success(result.rows, buildPaginationMeta(parsed.value, result.total));
+    return successResponse(result.rows, {
+      pagination: buildPaginationMeta(parsed.value, result.total),
+    });
   } catch (error) {
     console.error("GET /api/requirements failed:", error);
-    return internalError();
+    return internalErrorResponse();
+  }
+}
+
+/**
+ * POST /api/requirements — create a requirement in an accessible project.
+ *
+ * Auth: 401 `UNAUTHENTICATED` without a valid Supabase session/JWT.
+ * Authorization: ADMIN / PROJECT_MANAGER of the owning organization only
+ * (DEVELOPER → 403 — no INSERT policy). The project is verified server-side
+ * through RLS; inaccessible projects share the same 404 (no oracle). No
+ * `organizationId` is accepted — ownership is derived from the project.
+ * `display_id` is server-generated (`<PROJECT_CODE>-NNN`, project-scoped
+ * unique); client values are ignored. `assigneeId` must be an org member,
+ * `sprintId`/`dependencyId` must belong to the same project (400 otherwise).
+ * Body: `projectId` + `title` + `category` required; `description`,
+ * `businessValue`, `priority`, `status`, `assigneeId`, `sprintId`,
+ * `customerImportance`, `urgency`, `complexity`, `estimatedEffort`, `risk`,
+ * `storyPoints`, `dependencyId` optional.
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  let auth;
+  try {
+    auth = await requireAuthenticatedContext(request);
+  } catch (error) {
+    console.error("POST /api/requirements auth failed:", error);
+    return internalErrorResponse();
+  }
+  if (!auth.ok) {
+    return auth.response;
+  }
+  const { context } = auth;
+
+  let scope;
+  try {
+    scope = await resolveRequestScope(context.supabase, context.user.id);
+  } catch (error) {
+    console.error("POST /api/requirements scope failed:", error);
+    return internalErrorResponse();
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return validationErrorResponse([
+      { field: "body", message: "Request body must be valid JSON" },
+    ]);
+  }
+
+  const parsed = parseRequirementCreateBody(body);
+  if (!parsed.ok) {
+    return validationErrorResponse(parsed.details);
+  }
+
+  try {
+    const result = await createRequirement(
+      context.supabase,
+      scope,
+      parsed.value,
+    );
+    if (!result.ok) {
+      return mutationFailureResponse(result.failure);
+    }
+    return createdResponse(result.data);
+  } catch (error) {
+    console.error("POST /api/requirements failed:", error);
+    return internalErrorResponse();
   }
 }

@@ -42,3 +42,19 @@ export async function isRequirementAccessible(
   }
   return data !== null;
 }
+
+export async function isSprintAccessible(
+  client: SupabaseClient,
+  sprintId: string,
+): Promise<boolean> {
+  const { data, error } = await client
+    .from("sprints")
+    .select("id")
+    .eq("id", sprintId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    throw error;
+  }
+  return data !== null;
+}

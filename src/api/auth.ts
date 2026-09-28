@@ -3,7 +3,12 @@ import type { NextResponse } from "next/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
-import { isAppRole, type RequestScope } from "@/types/api";
+import {
+  isAppRole,
+  ROLE_PRIORITY,
+  type AppRole,
+  type RequestScope,
+} from "@/types/api";
 import { unauthenticatedResponse } from "./response";
 
 /**
@@ -119,9 +124,15 @@ interface OrganizationMembershipRow {
  * Resolves the server-derived authorization scope for primary API routes.
  * Reads `organization_members` through the caller's own RLS-enforcing
  * client (so only memberships visible to the caller are returned) and
- * validates every role against the exactly-three-role model
- * (ADMIN / PROJECT_MANAGER / DEVELOPER). Unknown role values are dropped
- * fail-closed. Never reads roles, org IDs, or membership from the request.
+ * validates every role against the exactly-six-role model
+ * (ADMIN / PROJECT_MANAGER / DEVELOPER / FINANCE / LEGAL / HR). Unknown
+ * role values are dropped fail-closed. Never reads roles, org IDs, or
+ * membership from the request.
+ *
+ * Role semantics:
+ * - ADMIN / PROJECT_MANAGER: organization-wide (staff).
+ * - DEVELOPER / FINANCE / LEGAL: project-scoped via `project_members`.
+ * - HR: organization-scoped, zero project-data access (enforced per-route).
  */
 export async function resolveRequestScope(
   supabase: SupabaseClient,
@@ -150,6 +161,17 @@ export async function resolveRequestScope(
     rolesByOrg[row.organization_id] = row.role;
   }
 
+  const primaryOrganizationId = organizationIds[0];
+  let primaryRole: RequestScope["primaryRole"] = undefined;
+  let bestPriority = -1;
+  for (const role of Object.values(rolesByOrg) as AppRole[]) {
+    const priority = ROLE_PRIORITY[role] ?? -1;
+    if (priority > bestPriority) {
+      bestPriority = priority;
+      primaryRole = role;
+    }
+  }
+
   return {
     userId,
     organizationIds,
@@ -157,5 +179,63 @@ export async function resolveRequestScope(
     isStaffAnywhere: Object.values(rolesByOrg).some(
       (role) => role === "ADMIN" || role === "PROJECT_MANAGER",
     ),
+    primaryOrganizationId,
+    primaryRole,
   };
+}
+
+/**
+ * Returns the caller's role in a specific organization (fail-closed).
+ */
+export function roleInOrg(
+  scope: RequestScope,
+  organizationId: string,
+): AppRole | undefined {
+  return scope.rolesByOrg[organizationId];
+}
+
+/**
+ * True when the caller acts as HR in the given organization (or primary
+ * org when omitted). HR has zero project-data access — routes serving
+ * project data must deny HR before any project query.
+ */
+export function isHrInOrg(
+  scope: RequestScope,
+  organizationId?: string,
+): boolean {
+  const orgId = organizationId ?? scope.primaryOrganizationId;
+  if (!orgId) return scope.primaryRole === "HR";
+  return scope.rolesByOrg[orgId] === "HR";
+}
+
+/**
+ * Organization ids where the caller holds operational staff privilege
+ * (ADMIN or PROJECT_MANAGER).
+ */
+export function staffOrgIds(scope: RequestScope): string[] {
+  return scope.organizationIds.filter((orgId) => {
+    const role = scope.rolesByOrg[orgId];
+    return role === "ADMIN" || role === "PROJECT_MANAGER";
+  });
+}
+
+/**
+ * Fail-closed project-membership probe through the caller's
+ * RLS-enforcing client. Returns true only when the caller can see the
+ * project row (org-staff visibility for ADMIN/PM, explicit
+ * `project_members` row for DEV/FINANCE/LEGAL). HR callers return false
+ * because they hold no project membership and staff policies exclude HR.
+ */
+export async function isProjectMemberOf(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return data !== null;
 }

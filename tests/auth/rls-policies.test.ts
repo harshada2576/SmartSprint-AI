@@ -245,7 +245,13 @@ describe.skipIf(!isLiveEnvConfigured())("organization isolation (live behavioral
       const updateAttempt = runAsUser(PM_A, async (client) =>
         client.query("update public.projects set name = 'RLS-HIJACK' where id = $1", [ORG_B_PROJECT]),
       );
-      await expect(updateAttempt).rejects.toSatisfy(isRlsViolation);
+      // UPDATE on invisible rows affects zero rows (RLS-filtered) or raises; both are deny.
+      try {
+        const res = await updateAttempt;
+        expect(res.rowCount).toBe(0);
+      } catch (error) {
+        expect(isRlsViolation(error)).toBe(true);
+      }
       const deleteAttempt = runAsUser(PM_A, async (client) =>
         client.query("delete from public.projects where id = $1", [ORG_B_PROJECT]),
       );

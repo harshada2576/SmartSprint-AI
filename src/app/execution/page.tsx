@@ -10,6 +10,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import { PriorityChip, StatusChip } from "@/components/ui/StatusChip";
 import { Progress } from "@/components/ui/Progress";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
 import {
   Table,
   TableBody,
@@ -20,119 +22,106 @@ import {
 } from "@/components/ui/Table";
 import {
   CheckSquare,
-  Users,
   Clock,
   Calendar,
-  MoreHorizontal,
-  Play,
-  Pause,
-  Flag,
-  FileText,
-  MessageSquare,
-  Paperclip,
-  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
+import {
+  buildQuery,
+  normalizeTask,
+  shortId,
+  taskStageProgress,
+  useCollection,
+  type TaskItem,
+} from "@/lib/api-client";
+import { formatRelativeTime } from "@/lib/utils";
 
-const myTasks = [
-  {
-    id: "TASK-107",
-    title: "Implement product search",
-    priority: "high",
-    status: "inProgress",
-    dueDate: "2025-07-25",
-    progress: 65,
-    sprint: "Sprint 4",
-    project: "E-Commerce Platform",
-  },
-  {
-    id: "TASK-113",
-    title: "Write unit tests for auth module",
-    priority: "medium",
-    status: "todo",
-    dueDate: "2025-07-26",
-    progress: 0,
-    sprint: "Sprint 4",
-    project: "E-Commerce Platform",
-  },
-  {
-    id: "TASK-114",
-    title: "Review API documentation",
-    priority: "low",
-    status: "todo",
-    dueDate: "2025-07-28",
-    progress: 0,
-    sprint: "Sprint 4",
-    project: "E-Commerce Platform",
-  },
-  {
-    id: "TASK-115",
-    title: "Fix login redirect bug",
-    priority: "high",
-    status: "review",
-    dueDate: "2025-07-24",
-    progress: 90,
-    sprint: "Sprint 4",
-    project: "Mobile Banking App",
-  },
-];
+const TEAM_PAGE_SIZE = 20;
 
-const teamTasks = [
-  {
-    id: "TASK-101",
-    title: "Implement user authentication API",
-    assignee: "John Smith",
-    status: "completed",
-    priority: "high",
-    progress: 100,
-    updated: "2 hours ago",
-  },
-  {
-    id: "TASK-102",
-    title: "Design login page UI",
-    assignee: "Sarah Chen",
-    status: "completed",
-    priority: "medium",
-    progress: 100,
-    updated: "4 hours ago",
-  },
-  {
-    id: "TASK-107",
-    title: "Implement product search",
-    assignee: "Emily Davis",
-    status: "inProgress",
-    priority: "high",
-    progress: 65,
-    updated: "1 hour ago",
-  },
-  {
-    id: "TASK-108",
-    title: "Add shopping cart functionality",
-    assignee: "David Wilson",
-    status: "inProgress",
-    priority: "high",
-    progress: 40,
-    updated: "30 min ago",
-  },
-  {
-    id: "TASK-109",
-    title: "Setup payment gateway",
-    assignee: "John Smith",
-    status: "todo",
-    priority: "high",
-    progress: 10,
-    updated: "1 day ago",
-  },
-];
+function formatUpdated(value: string): string {
+  if (!value) return "—";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return formatRelativeTime(value);
+}
 
-const recentActivity = [
-  { id: 1, action: "Started working on", item: "TASK-107", time: "2 hours ago" },
-  { id: 2, action: "Completed", item: "TASK-101", time: "4 hours ago" },
-  { id: 3, action: "Added comment on", item: "TASK-108", time: "5 hours ago" },
-  { id: 4, action: "Updated status of", item: "TASK-115", time: "Yesterday" },
-];
+function formatDueDate(value: string | null): string {
+  if (!value) return "No due date";
+  const time = new Date(value).getTime();
+  if (Number.isNaN(time)) return value;
+  return formatRelativeTime(value);
+}
+
+function isToday(value: string): boolean {
+  const time = new Date(value);
+  if (Number.isNaN(time.getTime())) return false;
+  const now = new Date();
+  return (
+    time.getFullYear() === now.getFullYear() &&
+    time.getMonth() === now.getMonth() &&
+    time.getDate() === now.getDate()
+  );
+}
 
 export default function ExecutionPage() {
   const router = useRouter();
+  const [tab, setTab] = React.useState("mywork");
+
+  const teamQuery = React.useMemo(
+    () => buildQuery({ page: 1, pageSize: TEAM_PAGE_SIZE }),
+    [],
+  );
+  const {
+    items: teamTasks,
+    error: teamError,
+    isLoading: teamIsLoading,
+    retry: retryTeam,
+  } = useCollection<TaskItem>("/api/tasks", normalizeTask, teamQuery);
+
+  // My Work uses the caller-scoped form GET /api/tasks?assignee=me. The
+  // literal "me" is resolved server-side to the authenticated Supabase user;
+  // no client user ID, localStorage identity, or /api/me lookup is used.
+  const myWorkQuery = React.useMemo(
+    () => buildQuery({ assignee: "me", page: 1, pageSize: TEAM_PAGE_SIZE }),
+    [],
+  );
+  const {
+    items: myTasks,
+    error: myWorkError,
+    isLoading: myWorkIsLoading,
+    retry: retryMyWork,
+  } = useCollection<TaskItem>("/api/tasks", normalizeTask, myWorkQuery);
+
+  const showLoading = teamIsLoading && teamTasks.length === 0;
+  const showMyWorkLoading = myWorkIsLoading && myTasks.length === 0;
+
+  // Summary counts are computed from the loaded team page (real rows only).
+  const inProgressCount = teamTasks.filter(
+    (task) => task.columnStatus === "inProgress",
+  ).length;
+  const todoCount = teamTasks.filter(
+    (task) => task.columnStatus === "todo" || task.columnStatus === "backlog",
+  ).length;
+  const reviewCount = teamTasks.filter(
+    (task) => task.columnStatus === "review" || task.columnStatus === "testing",
+  ).length;
+  const completedTodayCount = teamTasks.filter(
+    (task) => task.columnStatus === "done" && isToday(task.updatedAt),
+  ).length;
+
+  // Recent activity is derived from the most recently updated real tasks.
+  const recentActivity = [...teamTasks]
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )
+    .slice(0, 4)
+    .map((task) => ({
+      id: task.id,
+      action: "Updated",
+      item: task.displayId,
+      time: formatUpdated(task.updatedAt),
+    }));
 
   return (
     <AuthenticatedLayout>
@@ -145,7 +134,7 @@ export default function ExecutionPage() {
         ]}
       />
 
-      <Tabs defaultValue="mywork">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="mywork">My Work</TabsTrigger>
           <TabsTrigger value="team">Team Work</TabsTrigger>
@@ -153,19 +142,149 @@ export default function ExecutionPage() {
         </TabsList>
 
         <TabsContent value="mywork" className="mt-6">
+          {showMyWorkLoading ? (
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                {[0, 1, 2, 3].map((index) => (
+                  <div key={index} className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : myWorkError !== null && myTasks.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">
+                <EmptyState
+                  icon={AlertCircle}
+                  title="Couldn't load your work"
+                  description={myWorkError.message}
+                  action={{ label: "Try again", onClick: retryMyWork }}
+                />
+              </CardContent>
+            </Card>
+          ) : myTasks.length === 0 ? (
+          <Card>
+            <CardContent className="p-6">
+              <EmptyState
+                icon={CheckSquare}
+                title="No tasks assigned to you"
+                description="Tasks assigned to you will show up here. Team work below is already live."
+                action={{ label: "View team work", onClick: () => setTab("team") }}
+              />
+            </CardContent>
+          </Card>
+          ) : (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base">My Tasks</CardTitle>
+              <Badge variant="secondary" size="sm">
+                {myTasks.length} tasks
+              </Badge>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-slate-100">
+                {myTasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
+                    onClick={() => router.push(`/tasks/${task.id}`)}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <span className="font-mono text-xs text-slate-400">
+                          {task.displayId}
+                        </span>
+                        <h4 className="font-medium text-slate-900">
+                          {task.title}
+                        </h4>
+                      </div>
+                      <PriorityChip priority={task.priority} size="sm" />
+                    </div>
+                    <div className="flex items-center gap-4 text-sm text-slate-500 mb-3">
+                      <span>{shortId(task.projectId)}</span>
+                      <span>•</span>
+                      <span>
+                        {task.sprintId ? shortId(task.sprintId) : "No sprint"}
+                      </span>
+                      <span>•</span>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>Due {formatDueDate(task.dueDate)}</span>
+                      </div>
+                    </div>
+                    {task.isBlocked && task.blockedReason && (
+                      <div className="mb-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="font-semibold">Blocked:</span> {task.blockedReason}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <Progress value={task.progressPercent ?? taskStageProgress(task.columnStatus)} size="sm" />
+                      </div>
+                      <span className="text-xs text-slate-500 w-10">
+                        {task.progressPercent ?? taskStageProgress(task.columnStatus)}%
+                      </span>
+                      {task.isBlocked || task.columnStatus === "blocked" ? (
+                        <Badge variant="danger" size="sm" className="bg-red-500 text-white uppercase text-[10px]">
+                          Blocked
+                        </Badge>
+                      ) : (
+                        <StatusChip status={task.columnStatus} size="sm" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="team" className="mt-6">
+          {showLoading ? (
+            <Card>
+              <CardContent className="p-6 space-y-3">
+                {[0, 1, 2, 3].map((index) => (
+                  <div key={index} className="space-y-2">
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : teamError !== null && teamTasks.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">
+                <EmptyState
+                  icon={AlertCircle}
+                  title="Couldn't load team work"
+                  description={teamError.message}
+                  action={{ label: "Try again", onClick: retryTeam }}
+                />
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid lg:grid-cols-3 gap-6">
-            {/* My Tasks */}
+            {/* Team Tasks */}
             <div className="lg:col-span-2">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="text-base">My Tasks</CardTitle>
+                  <CardTitle className="text-base">Team Tasks</CardTitle>
                   <Badge variant="secondary" size="sm">
-                    {myTasks.length} tasks
+                    {teamTasks.length} tasks
                   </Badge>
                 </CardHeader>
                 <CardContent className="p-0">
+                  {teamTasks.length === 0 ? (
+                    <p className="p-4 text-sm text-slate-500">
+                      No tasks yet. Tasks in your projects will show up here.
+                    </p>
+                  ) : (
                   <div className="divide-y divide-slate-100">
-                    {myTasks.map((task) => (
+                    {teamTasks.map((task) => (
                       <div
                         key={task.id}
                         className="p-4 hover:bg-slate-50 cursor-pointer transition-colors"
@@ -174,7 +293,7 @@ export default function ExecutionPage() {
                         <div className="flex items-start justify-between mb-2">
                           <div>
                             <span className="font-mono text-xs text-slate-400">
-                              {task.id}
+                              {task.displayId}
                             </span>
                             <h4 className="font-medium text-slate-900">
                               {task.title}
@@ -183,27 +302,42 @@ export default function ExecutionPage() {
                           <PriorityChip priority={task.priority} size="sm" />
                         </div>
                         <div className="flex items-center gap-4 text-sm text-slate-500 mb-3">
-                          <span>{task.project}</span>
+                          <span>{shortId(task.projectId)}</span>
                           <span>•</span>
-                          <span>{task.sprint}</span>
+                          <span>
+                            {task.sprintId ? shortId(task.sprintId) : "No sprint"}
+                          </span>
                           <span>•</span>
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3.5 w-3.5" />
-                            <span>Due {task.dueDate}</span>
+                            <span>Due {formatDueDate(task.dueDate)}</span>
                           </div>
                         </div>
+                        {task.isBlocked && task.blockedReason && (
+                          <div className="mb-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-xs text-red-600 dark:text-red-400 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="font-semibold">Blocked:</span> {task.blockedReason}
+                          </div>
+                        )}
                         <div className="flex items-center gap-3">
                           <div className="flex-1">
-                            <Progress value={task.progress} size="sm" />
+                            <Progress value={task.progressPercent ?? taskStageProgress(task.columnStatus)} size="sm" />
                           </div>
                           <span className="text-xs text-slate-500 w-10">
-                            {task.progress}%
+                            {task.progressPercent ?? taskStageProgress(task.columnStatus)}%
                           </span>
-                          <StatusChip status={task.status} size="sm" />
+                          {task.isBlocked || task.columnStatus === "blocked" ? (
+                            <Badge variant="danger" size="sm" className="bg-red-500 text-white uppercase text-[10px]">
+                              Blocked
+                            </Badge>
+                          ) : (
+                            <StatusChip status={task.columnStatus} size="sm" />
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -218,18 +352,18 @@ export default function ExecutionPage() {
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600">In Progress</span>
-                    <Badge size="sm">1</Badge>
+                    <Badge size="sm">{inProgressCount}</Badge>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600">To Do</span>
                     <Badge variant="secondary" size="sm">
-                      2
+                      {todoCount}
                     </Badge>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-slate-600">In Review</span>
                     <Badge variant="info" size="sm">
-                      1
+                      {reviewCount}
                     </Badge>
                   </div>
                   <div className="border-t border-slate-100 pt-3">
@@ -238,7 +372,7 @@ export default function ExecutionPage() {
                         Completed Today
                       </span>
                       <span className="text-lg font-bold text-emerald-600">
-                        2
+                        {completedTodayCount}
                       </span>
                     </div>
                   </div>
@@ -251,6 +385,9 @@ export default function ExecutionPage() {
                   <CardTitle className="text-base">Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
+                  {recentActivity.length === 0 ? (
+                    <p className="text-sm text-slate-500">No recent activity yet.</p>
+                  ) : (
                   <div className="space-y-3">
                     {recentActivity.map((activity) => (
                       <div key={activity.id} className="flex gap-3 text-sm">
@@ -271,14 +408,15 @@ export default function ExecutionPage() {
                       </div>
                     ))}
                   </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
           </div>
-        </TabsContent>
+          )}
 
-        <TabsContent value="team" className="mt-6">
-          <Card>
+          {!showLoading && teamError === null && teamTasks.length > 0 ? (
+          <Card className="mt-6">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Team Work</CardTitle>
               <div className="flex items-center gap-2">
@@ -309,30 +447,32 @@ export default function ExecutionPage() {
                       <TableCell>
                         <div>
                           <span className="font-mono text-xs text-slate-400">
-                            {task.id}
+                            {task.displayId}
                           </span>
                           <p className="font-medium text-slate-900">
                             {task.title}
                           </p>
                         </div>
                       </TableCell>
-                      <TableCell>{task.assignee}</TableCell>
                       <TableCell>
-                        <StatusChip status={task.status} size="sm" />
+                        {task.assigneeId ? shortId(task.assigneeId) : "Unassigned"}
+                      </TableCell>
+                      <TableCell>
+                        <StatusChip status={task.columnStatus} size="sm" />
                       </TableCell>
                       <TableCell>
                         <PriorityChip priority={task.priority} size="sm" />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2 w-28">
-                          <Progress value={task.progress} size="sm" />
+                          <Progress value={taskStageProgress(task.columnStatus)} size="sm" />
                           <span className="text-xs text-slate-500">
-                            {task.progress}%
+                            {taskStageProgress(task.columnStatus)}%
                           </span>
                         </div>
                       </TableCell>
                       <TableCell className="text-sm text-slate-500">
-                        {task.updated}
+                        {formatUpdated(task.updatedAt)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -340,6 +480,7 @@ export default function ExecutionPage() {
               </Table>
             </CardContent>
           </Card>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="activity" className="mt-6">

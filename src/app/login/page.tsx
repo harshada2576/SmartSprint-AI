@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { AUTH_QUERY_ERRORS, getAuthErrorMessage } from "@/lib/auth/auth-errors";
+import { requestProvisioning } from "@/lib/auth/organization";
 import { createClient } from "@/lib/supabase/client";
 import {
   Briefcase,
@@ -76,13 +77,43 @@ function LoginForm() {
     setIsLoading(true);
     try {
       const supabase = createClient();
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: formData.email.trim(),
-        password: formData.password,
-      });
+      const { data, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: formData.email.trim(),
+          password: formData.password,
+        });
       if (signInError) {
         setError(getAuthErrorMessage(signInError));
         return;
+      }
+      // Self-heal provisioning: if this identity has no organization
+      // membership yet (e.g. email-confirmation race where the callback
+      // never ran, or a failed first provision), the trusted server lane
+      // creates exactly one organization + ADMIN membership from the
+      // verified Auth identity. Existing members are returned untouched
+      // (no role changes, no extra organizations, no client-supplied org).
+      // The fresh access token is passed explicitly (race-safe: the
+      // server verifies it with auth.getUser and never trusts cookies
+      // alone immediately after sign-in).
+      try {
+        await requestProvisioning(undefined, {
+          accessToken: data.session?.access_token,
+        });
+      } catch (provisionError) {
+        const message =
+          provisionError instanceof Error ? provisionError.message : "";
+        if (message === "account_exists") {
+          // This email belongs to an application profile owned by a
+          // different auth identity (e.g. a seeded row): fail closed.
+          setError(
+            "An application account with this email already exists. Please sign in with your original method or contact your administrator."
+          );
+          await supabase.auth.signOut();
+          return;
+        }
+        // Transient provisioning failure: the dashboard/projects APIs
+        // will surface their own error states; do not lock the user out
+        // of an existing membership here.
       }
       router.push(
         redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//")
@@ -163,6 +194,8 @@ function LoginForm() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <Input
+              id="email"
+              name="email"
               label="Email Address"
               type="email"
               placeholder="john@company.com"
@@ -176,6 +209,8 @@ function LoginForm() {
 
             <div>
               <Input
+                id="password"
+                name="password"
                 label="Password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Enter your password"
@@ -217,6 +252,7 @@ function LoginForm() {
             </div>
 
             <Button
+              id="login-submit-button"
               type="submit"
               className="w-full"
               size="lg"

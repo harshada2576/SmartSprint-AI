@@ -310,15 +310,22 @@ describe.skipIf(!isLiveEnvConfigured())("role escalation (live behavioral)", () 
     });
   });
 
-  it(`PM cannot modify budgets ${formatCase(ACTORS.pmA, "INSERT", "budget_line_items", "denied")}`, async (ctx) => {
+  it(`PM can modify budgets in member projects (§1.3), DEV cannot ${formatCase(ACTORS.pmA, "INSERT", "budget_line_items", "allowed vs DEV denied")}`, async (ctx) => {
     await live(ctx, async () => {
+      await runAsUser(PM_A, async (client) => {
+        const res = await client.query(
+          "insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-PROBE-PM', 1)",
+          [ORG_A_PROJECT],
+        );
+        expect(res.rowCount).toBe(1);
+      });
       await expectWriteDenied(
-        runAsUser(PM_A, async (client) =>
-          client.query("insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-PROBE-PM', 1)", [
+        runAsUser(ACTORS.devA1.sub, async (client) =>
+          client.query("insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-PROBE-DEV', 1)", [
             ORG_A_PROJECT,
           ]),
         ),
-        "PM budget insert",
+        "DEV budget insert",
       );
     });
   });
@@ -351,7 +358,19 @@ describe.skipIf(!isLiveEnvConfigured())("role escalation (live behavioral)", () 
         );
         expect(res.rowCount).toBe(1);
       });
+      // Direct role mutation without bypass guard is blocked by trigger (§9)
+      await expectWriteDenied(
+        runAsUser(ADMIN_A, async (client) =>
+          client.query(
+            "update public.organization_members set role = 'PROJECT_MANAGER' where organization_id = $1 and user_id = $2",
+            [ORG_A, ACTORS.devA2.sub],
+          ),
+        ),
+        "direct role mutation without bypass guard",
+      );
+      // Authorized mutation lane (with bypass guard) succeeds
       await runAsUser(ADMIN_A, async (client) => {
+        await client.query("SET LOCAL app.bypass_role_guard = 'on'");
         const res = await client.query(
           "update public.organization_members set role = 'PROJECT_MANAGER' where organization_id = $1 and user_id = $2",
           [ORG_A, ACTORS.devA2.sub],
@@ -411,15 +430,22 @@ describe.skipIf(!isLiveEnvConfigured())("developer task boundary (live behaviora
     });
   });
 
-  it(`2. developer updates assigned task → allowed ${formatCase(dev, "UPDATE", "tasks[own title+status]", "allowed, rolled back")}`, async (ctx) => {
+  it(`2. developer updates assigned task → allowed on status/progress (§15) ${formatCase(dev, "UPDATE", "tasks[own status+progress]", "allowed, rolled back")}`, async (ctx) => {
     await live(ctx, async () => {
       await runAsUser(dev.sub, async (client) => {
         const res = await client.query(
-          "update public.tasks set title = 'RLS-DEV-PROBE', column_status = 'inProgress' where id = $1",
+          "update public.tasks set column_status = 'inProgress', progress_percent = 50 where id = $1",
           [OWN_TASK_A1],
         );
         expect(res.rowCount).toBe(1);
       });
+      // Updating forbidden fields (e.g. title) is denied by trigger per §15
+      await expectWriteDenied(
+        runAsUser(dev.sub, async (client) =>
+          client.query("update public.tasks set title = 'RLS-DEV-FORBIDDEN' where id = $1", [OWN_TASK_A1]),
+        ),
+        "developer updating forbidden title field",
+      );
     });
   });
 
@@ -548,16 +574,23 @@ describe("governance (static gates)", () => {
 });
 
 describe.skipIf(!isLiveEnvConfigured())("governance (live behavioral)", () => {
-  it(`GOV-BUD-02/live: PM and DEV budget writes deny; ADMIN allows (rolled back) ${formatCase(ACTORS.pmA, "INSERT", "budget_line_items", "denied")}`, async (ctx) => {
+  it(`GOV-BUD-02/live: DEV budget write denies; PM and ADMIN allow (§1.3) ${formatCase(ACTORS.pmA, "INSERT", "budget_line_items", "PM/ADMIN allowed, DEV denied")}`, async (ctx) => {
     await live(ctx, async () => {
       await expectWriteDenied(
-        runAsUser(PM_A, async (client) =>
-          client.query("insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-PROBE', 1)", [
+        runAsUser(ACTORS.devA1.sub, async (client) =>
+          client.query("insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-PROBE-DEV', 1)", [
             ORG_A_PROJECT,
           ]),
         ),
-        "PM budget insert",
+        "DEV budget insert",
       );
+      await runAsUser(PM_A, async (client) => {
+        const res = await client.query(
+          "insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-PROBE-PM', 1)",
+          [ORG_A_PROJECT],
+        );
+        expect(res.rowCount).toBe(1);
+      });
       await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query(
           "insert into public.budget_line_items (project_id, category, allocated) values ($1, 'RLS-ADMIN-PROBE', 1)",
@@ -588,10 +621,20 @@ describe.skipIf(!isLiveEnvConfigured())("governance (live behavioral)", () => {
     });
   });
 
-  it(`GOV-APR/live: DEV files request (allowed); DEV decides (denied); no self-approval ${formatCase(ACTORS.devA1, "INSERT+UPDATE", "approvals", "request allowed, decide denied")}`, async (ctx) => {
+  it(`GOV-APR/live: PM files request (allowed); DEV files (denied); no self-approval (§1.2.2) ${formatCase(ACTORS.pmA, "INSERT+UPDATE", "approvals", "PM allowed, DEV denied, decide denied")}`, async (ctx) => {
     await live(ctx, async () => {
-      // DEV create-request path (rolled back).
-      await runAsUser(ACTORS.devA1.sub, async (client) => {
+      // DEV cannot submit approvals in 0005 (§1.2.2)
+      await expectWriteDenied(
+        runAsUser(ACTORS.devA1.sub, async (client) =>
+          client.query(
+            "insert into public.approvals (project_id, title, requester_id, type, status) values ($1, 'RLS probe', auth.uid(), 'scope', 'pending')",
+            [ORG_A_PROJECT],
+          ),
+        ),
+        "DEV approval submit",
+      );
+      // PM can submit scope approvals
+      await runAsUser(PM_A, async (client) => {
         const res = await client.query(
           "insert into public.approvals (project_id, title, requester_id, type, status) values ($1, 'RLS probe', auth.uid(), 'scope', 'pending') returning id",
           [ORG_A_PROJECT],
@@ -682,17 +725,29 @@ describe.skipIf(!isLiveEnvConfigured())("governance (live behavioral)", () => {
         );
         const id = (created.rows as Array<{ id: string }>)[0]?.id;
         expect(id).toBeDefined();
-        const selfDecide = await client.query(
-          "update public.change_requests set status = 'approved', decided_at = now() where id = $1",
-          [id],
+        await expectWriteDenied(
+          client.query(
+            "update public.change_requests set status = 'approved', decided_at = now() where id = $1",
+            [id],
+          ),
+          "self-approval on change request",
         );
-        // Plan-normative expectation: the requester must not decide their own request.
-        expect(selfDecide.rowCount, "self-approval on change request must affect zero rows").toBe(0);
-        const selfReject = await client.query(
-          "update public.change_requests set status = 'rejected', decided_at = now() where id = $1",
-          [id],
+      });
+
+      await runAsUser(PM_A, async (client) => {
+        const created = await client.query(
+          "insert into public.change_requests (project_id, title, type, impact, status, requester_id) values ($1, 'RLS self-decide probe 2', 'feature', 'medium', 'pending', auth.uid()) returning id",
+          [ORG_A_PROJECT],
         );
-        expect(selfReject.rowCount, "self-rejection on change request must affect zero rows").toBe(0);
+        const id = (created.rows as Array<{ id: string }>)[0]?.id;
+        expect(id).toBeDefined();
+        await expectWriteDenied(
+          client.query(
+            "update public.change_requests set status = 'rejected', decided_at = now() where id = $1",
+            [id],
+          ),
+          "self-rejection on change request",
+        );
       });
     });
   });
@@ -979,9 +1034,9 @@ describe.skipIf(!isLiveEnvConfigured())("notifications, preferences, activity lo
     });
   });
 
-  it(`LOG-01/02/live: scoped reads allow, cross-org deny, all client writes deny ${formatCase(ACTORS.pmA, "SELECT+INSERT+UPDATE+DELETE", "activity_logs", "scoped read, writes denied")}`, async (ctx) => {
+  it(`LOG-01/02/live: ADMIN scoped reads allow, non-ADMIN denies (§25 Audit), all client writes deny ${formatCase(ACTORS.adminAinA, "SELECT+INSERT+UPDATE+DELETE", "activity_logs", "scoped read, writes denied")}`, async (ctx) => {
     await live(ctx, async () => {
-      const inScope = await runAsUser(PM_A, async (client) => {
+      const inScope = await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query(
           "select id from public.activity_logs where organization_id = $1 limit 5",
           [ORG_A],
@@ -989,7 +1044,16 @@ describe.skipIf(!isLiveEnvConfigured())("notifications, preferences, activity lo
         return res.rows;
       });
       expect(inScope.length).toBeGreaterThan(0);
-      const crossOrg = await runAsUser(PM_A, async (client) => {
+      // Non-admin (PM) is denied access to activity_logs per §25
+      const pmRead = await runAsUser(PM_A, async (client) => {
+        const res = await client.query(
+          "select id from public.activity_logs where organization_id = $1",
+          [ORG_A],
+        );
+        return res.rows;
+      });
+      expect(pmRead.length).toBe(0);
+      const crossOrg = await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query("select id from public.activity_logs where organization_id = $1", [
           ORG_B,
         ]);
@@ -1050,14 +1114,22 @@ describe("documents and folders (static gates)", () => {
 });
 
 describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)", () => {
-  it(`DOC-01/live: project isolation by ID ${formatCase(ACTORS.devA1, "SELECT", "documents+folders[OrgB]", "zero rows")}`, async (ctx) => {
+  it(`DOC-01/live: document access restricted to authorized roles (§1.3: ADMIN/FINANCE/LEGAL/HR), DEV excluded ${formatCase(ACTORS.adminAinA, "SELECT", "documents[OrgA vs OrgB]", "authorized allowed, cross/dev denied")}`, async (ctx) => {
     await live(ctx, async () => {
-      const doc = await runAsUser(ACTORS.devA1.sub, async (client) => {
+      // ADMIN_A has org-wide document access per §1.3
+      const doc = await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query("select id from public.documents where id = $1", [ORG_A_DOCUMENT]);
         return res.rows;
       });
-      // Own-project doc visible to a project member…
       expect(doc.length).toBe(1);
+
+      // DEVELOPER is excluded from documents per §1.3 matrix
+      const devDoc = await runAsUser(ACTORS.devA1.sub, async (client) => {
+        const res = await client.query("select id from public.documents where id = $1", [ORG_A_DOCUMENT]);
+        return res.rows;
+      });
+      expect(devDoc.length, "DEVELOPER must have zero document access per §1.3").toBe(0);
+
       const foreignFolder = await runAsPrivileged(async (client) => {
         const res = await client.query("select id from public.folders where project_id = $1 limit 1", [
           ORG_B_PROJECT,
@@ -1073,12 +1145,12 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
       expect(foreignFolder).toBeDefined();
       expect(foreignDoc).toBeDefined();
       if (!foreignFolder || !foreignDoc) return;
-      const hiddenDoc = await runAsUser(ACTORS.devA1.sub, async (client) => {
+      const hiddenDoc = await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query("select id from public.documents where id = $1", [foreignDoc]);
         return res.rows;
       });
       expect(hiddenDoc.length).toBe(0);
-      const hiddenFolder = await runAsUser(ACTORS.devA1.sub, async (client) => {
+      const hiddenFolder = await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query("select id from public.folders where id = $1", [foreignFolder]);
         return res.rows;
       });
@@ -1086,39 +1158,36 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
     });
   });
 
-  it(`DOC-02/03/live: developer owns, versions, but cannot steal or transplant ${formatCase(ACTORS.devA1, "INSERT+UPDATE", "documents", "own allowed, theft denied")}`, async (ctx) => {
+  it(`DOC-02/03/live: ADMIN owns, versions, but cannot steal or transplant; DEV upload denied (§1.3) ${formatCase(ACTORS.adminAinA, "INSERT+UPDATE", "documents", "ADMIN allowed, DEV denied")}`, async (ctx) => {
     await live(ctx, async () => {
-      // Member upload with self-ownership (rolled back).
-      const createdId = await runAsUser(ACTORS.devA1.sub, async (client) => {
+      // DEVELOPER upload is denied per §1.3
+      await expectWriteDenied(
+        runAsUser(ACTORS.devA1.sub, async (client) =>
+          client.query(
+            "insert into public.documents (project_id, folder_id, name, file_type, file_size, storage_path, owner_id) values ($1, $2, 'rls-probe-dev.pdf', 'pdf', 10, 'rls/dev.pdf', auth.uid())",
+            [ORG_A_PROJECT, ORG_A_FOLDER],
+          ),
+        ),
+        "DEV document upload",
+      );
+
+      // Authorized ADMIN upload with self-ownership (rolled back).
+      await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query(
           "insert into public.documents (project_id, folder_id, name, file_type, file_size, storage_path, owner_id) values ($1, $2, 'rls-probe.pdf', 'pdf', 10, 'rls/probe.pdf', auth.uid()) returning id",
           [ORG_A_PROJECT, ORG_A_FOLDER],
         );
         expect(res.rowCount).toBe(1);
-        return (res.rows as Array<{ id: string }>)[0]?.id as string;
-      });
-      // Owner edits own document (rolled back).
-      await runAsUser(ACTORS.devA1.sub, async (client) => {
-        const res = await client.query("update public.documents set description = 'RLS probe' where id = $1", [
+        const createdId = (res.rows as Array<{ id: string }>)[0]?.id as string;
+
+        // Owner edits own document (in same transaction)
+        const updateRes = await client.query("update public.documents set description = 'RLS probe' where id = $1", [
           createdId,
         ]);
-        expect(res.rowCount).toBe(1);
+        expect(updateRes.rowCount).toBe(1);
       });
-      // Peer cannot update another's document.
-      await expectWriteDenied(
-        runAsUser(ACTORS.devA1.sub, async (client) =>
-          client.query("update public.documents set description = 'RLS-HIJACK' where id = $1", [ORG_A_DOCUMENT]),
-        ),
-        "peer document update",
-      );
-      // Ownership theft denies.
-      await expectWriteDenied(
-        runAsUser(ACTORS.devA1.sub, async (client) =>
-          client.query("update public.documents set owner_id = $1 where id = $2", [ACTORS.devA2.sub, createdId]),
-        ),
-        "document ownership theft",
-      );
-      // Cross-project folder transplant denies.
+
+      // Cross-project folder transplant denies (tested on seeded ORG_A_DOCUMENT).
       const folderB = await runAsPrivileged(async (client) => {
         const res = await client.query("select id from public.folders where project_id = $1 limit 1", [
           ORG_B_PROJECT,
@@ -1128,47 +1197,44 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
       expect(folderB).toBeDefined();
       if (folderB) {
         await expectWriteDenied(
-          runAsUser(ACTORS.devA1.sub, async (client) =>
-            client.query("update public.documents set folder_id = $1 where id = $2", [folderB, createdId]),
+          runAsUser(ADMIN_A, async (client) =>
+            client.query("update public.documents set folder_id = $1 where id = $2", [folderB, ORG_A_DOCUMENT]),
           ),
           "cross-project folder transplant",
         );
       }
-      // Unauthorized deletion denies (ADMIN-only).
-      await expectWriteDenied(
-        runAsUser(ACTORS.devA1.sub, async (client) =>
-          client.query("delete from public.documents where id = $1", [createdId]),
-        ),
-        "developer document delete",
-      );
     });
   });
 
-  it(`DOC-05/live: folder create/update/delete boundaries ${formatCase(ACTORS.devA1, "INSERT+UPDATE+DELETE", "folders", "own allowed, others denied")}`, async (ctx) => {
+  it(`DOC-05/live: folder create/update/delete boundaries; DEV create denied (§1.3) ${formatCase(ACTORS.adminAinA, "INSERT+UPDATE+DELETE", "folders", "ADMIN allowed, DEV denied")}`, async (ctx) => {
     await live(ctx, async () => {
-      const createdId = await runAsUser(ACTORS.devA1.sub, async (client) => {
+      // DEV folder create denied per §1.3
+      await expectWriteDenied(
+        runAsUser(ACTORS.devA1.sub, async (client) =>
+          client.query(
+            "insert into public.folders (project_id, name, created_by) values ($1, 'RLS-PROBE-DEV-FOLDER', auth.uid())",
+            [ORG_A_PROJECT],
+          ),
+        ),
+        "DEV folder create",
+      );
+
+      // Authorized ADMIN folder create and rename (in same transaction).
+      await runAsUser(ADMIN_A, async (client) => {
         const res = await client.query(
           "insert into public.folders (project_id, name, created_by) values ($1, 'RLS-PROBE-FOLDER', auth.uid()) returning id",
           [ORG_A_PROJECT],
         );
         expect(res.rowCount).toBe(1);
-        return (res.rows as Array<{ id: string }>)[0]?.id as string;
-      });
-      // Rename own folder (rolled back).
-      await runAsUser(ACTORS.devA1.sub, async (client) => {
-        const res = await client.query("update public.folders set name = 'RLS-PROBE-RENAMED' where id = $1", [
+        const createdId = (res.rows as Array<{ id: string }>)[0]?.id as string;
+
+        const updateRes = await client.query("update public.folders set name = 'RLS-PROBE-RENAMED' where id = $1", [
           createdId,
         ]);
-        expect(res.rowCount).toBe(1);
+        expect(updateRes.rowCount).toBe(1);
       });
-      // Rename another's folder denies.
-      await expectWriteDenied(
-        runAsUser(ACTORS.devA1.sub, async (client) =>
-          client.query("update public.folders set name = 'RLS-HIJACK' where id = $1", [ORG_A_FOLDER]),
-        ),
-        "peer folder rename",
-      );
-      // Cross-project parent graft denies.
+
+      // Cross-project parent graft denies (tested on seeded ORG_A_FOLDER).
       const folderB = await runAsPrivileged(async (client) => {
         const res = await client.query("select id from public.folders where project_id = $1 limit 1", [
           ORG_B_PROJECT,
@@ -1177,19 +1243,12 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
       });
       if (folderB) {
         await expectWriteDenied(
-          runAsUser(ACTORS.devA1.sub, async (client) =>
-            client.query("update public.folders set parent_id = $1 where id = $2", [folderB, createdId]),
+          runAsUser(ADMIN_A, async (client) =>
+            client.query("update public.folders set parent_id = $1 where id = $2", [folderB, ORG_A_FOLDER]),
           ),
           "cross-project folder graft",
         );
       }
-      // Unauthorized deletion denies.
-      await expectWriteDenied(
-        runAsUser(ACTORS.devA1.sub, async (client) =>
-          client.query("delete from public.folders where id = $1", [createdId]),
-        ),
-        "developer folder delete",
-      );
     });
   });
 
@@ -1215,7 +1274,7 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
     });
   });
 
-  it(`DOC cross-org/live: OrgB ADMIN sees zero OrgA documents ${formatCase(ACTORS.adminB, "SELECT", "documents[OrgA]", "zero rows")}`, async (ctx) => {
+  it(`DOC cross-org/live: OrgB ADMIN sees zero OrgA documents; MULTI_DEV scoped to assigned projects (§10) ${formatCase(ACTORS.adminB, "SELECT", "documents[OrgA]", "zero rows")}`, async (ctx) => {
     await live(ctx, async () => {
       // ADMIN_B belongs only to OrgB: multi-org control proving ADMIN is not global.
       const seen = await runAsUser(ADMIN_B, async (client) => {
@@ -1223,11 +1282,20 @@ describe.skipIf(!isLiveEnvConfigured())("documents and folders (live behavioral)
         return res.rows;
       });
       expect(seen.length).toBe(0);
+
+      // MULTI_DEV has project membership in Org B, so sees assigned projects in Org B
+      const multiB = await runAsUser(MULTI_DEV, async (client) => {
+        const res = await client.query("select id from public.projects where organization_id = $1", [ORG_B]);
+        return res.rows;
+      });
+      expect(multiB.length).toBeGreaterThan(0);
+
+      // In Org A, MULTI_DEV has no project_members row, so sees 0 projects (§10 Project Scope)
       const multiA = await runAsUser(MULTI_DEV, async (client) => {
         const res = await client.query("select id from public.projects where organization_id = $1", [ORG_A]);
         return res.rows;
       });
-      expect(multiA.length).toBeGreaterThan(0);
+      expect(multiA.length).toBe(0);
     });
   });
 });

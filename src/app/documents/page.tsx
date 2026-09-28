@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import {
   Folder,
   FileText,
-  Image,
+  ImageIcon,
   FileCode,
   MoreHorizontal,
   Upload,
@@ -107,7 +107,7 @@ const getFileIcon = (type: string) => {
     case "doc":
       return <FileText className="h-5 w-5 text-blue-500" />;
     case "image":
-      return <Image className="h-5 w-5 text-violet-500" />;
+     return <ImageIcon className="h-5 w-5 text-violet-500" />;
     case "code":
       return <FileCode className="h-5 w-5 text-emerald-500" />;
     case "spreadsheet":

@@ -1,0 +1,26 @@
+{
+  "model": "XGBClassifier - Accuracy Optimized",
+  "features": [
+    "category",
+    "business_value",
+    "customer_importance",
+    "urgency",
+    "complexity",
+    "estimated_effort",
+    "risk",
+    "story_points"
+  ],
+  "test_accuracy": 0.6129,
+  "test_macro_f1": 0.5273,
+  "test_balanced_accuracy": 0.5077,
+  "best_cv_accuracy": 0.5927,
+  "best_parameters": {
+    "model__subsample": 0.9,
+    "model__n_estimators": 100,
+    "model__min_child_weight": 5,
+    "model__max_depth": 2,
+    "model__learning_rate": 0.08,
+    "model__gamma": 0,
+    "model__colsample_bytree": 0.8
+  }
+}

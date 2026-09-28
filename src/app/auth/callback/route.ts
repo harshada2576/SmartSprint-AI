@@ -23,9 +23,18 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createClient();
   const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  
   if (exchangeError) {
-    return NextResponse.redirect(new URL("/login?error=oauth_failed", url.origin));
-  }
+  console.error("AUTH CALLBACK EXCHANGE FAILED:", {
+    message: exchangeError.message,
+    code: exchangeError.code,
+    status: exchangeError.status,
+  });
+
+  return NextResponse.redirect(
+    new URL("/login?error=oauth_failed", url.origin)
+  );
+}
 
   const {
     data: { user },

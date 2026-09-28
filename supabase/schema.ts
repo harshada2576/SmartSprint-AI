@@ -9,9 +9,12 @@ export const recommendationStatus = pgEnum("recommendation_status", ['pending', 
 export const requirementCategory = pgEnum("requirement_category", ['feature', 'bug', 'enhancement', 'security', 'uiux', 'performance', 'database', 'api', 'documentation'])
 export const requirementStatus = pgEnum("requirement_status", ['draft', 'pending', 'inProgress', 'review', 'testing', 'completed', 'blocked'])
 export const sprintStatus = pgEnum("sprint_status", ['planning', 'active', 'completed', 'cancelled'])
-export const taskColumnStatus = pgEnum("task_column_status", ['backlog', 'todo', 'inProgress', 'review', 'testing', 'done'])
-export const userRole = pgEnum("user_role", ['ADMIN', 'PROJECT_MANAGER', 'DEVELOPER'])
+export const taskColumnStatus = pgEnum("task_column_status", ['backlog', 'todo', 'inProgress', 'review', 'testing', 'done', 'blocked'])
+export const userRole = pgEnum("user_role", ['ADMIN', 'PROJECT_MANAGER', 'DEVELOPER', 'FINANCE', 'LEGAL', 'HR'])
 export const userStatus = pgEnum("user_status", ['active', 'inactive'])
+export const riskDomainEnum = pgEnum("risk_domain", ['technical', 'budget', 'legal', 'resource'])
+export const roleChangeRequestStatus = pgEnum("role_change_request_status", ['pending', 'approved', 'rejected'])
+export const taskDependencyType = pgEnum("task_dependency_type", ['blocks', 'is_blocked_by'])
 
 export const documentType = pgEnum("document_type", ['pdf', 'doc', 'image', 'code', 'spreadsheet', 'other'])
 export const contractStatus = pgEnum("contract_status", ['active', 'pending', 'expired', 'terminated'])
@@ -22,7 +25,7 @@ export const riskStatus = pgEnum("risk_status", ['open', 'mitigated', 'closed'])
 export const changeRequestType = pgEnum("change_request_type", ['feature', 'technical', 'process'])
 export const changeRequestStatus = pgEnum("change_request_status", ['pending', 'approved', 'rejected'])
 export const activityAction = pgEnum("activity_action", ['created', 'updated', 'deleted', 'approved', 'rejected', 'completed', 'assigned', 'commented'])
-export const entityTypeEnum = pgEnum("entity_type_enum", ['project', 'requirement', 'task', 'sprint', 'team', 'document', 'budget', 'approval', 'risk', 'change_request'])
+export const entityTypeEnum = pgEnum("entity_type_enum", ['project', 'requirement', 'task', 'sprint', 'team', 'document', 'budget', 'approval', 'risk', 'change_request', 'role_change_request'])
 export const notificationType = pgEnum("notification_type", ['task', 'sprint', 'approval', 'document', 'budget', 'system'])
 
 export const organizations = pgTable("organizations", {
@@ -141,6 +144,9 @@ export const sprints = pgTable("sprints", {
 	endDate: date("end_date"),
 	totalPoints: integer("total_points"),
 	completedPoints: integer("completed_points"),
+	capacityPoints: integer("capacity_points"),
+	capacityHours: integer("capacity_hours"),
+	createdBy: uuid("created_by"),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
@@ -149,6 +155,11 @@ export const sprints = pgTable("sprints", {
 		foreignColumns: [projects.id],
 		name: "sprints_project_id_fkey"
 	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.createdBy],
+		foreignColumns: [users.id],
+		name: "sprints_created_by_fkey"
+	}).onDelete("set null"),
 	index("idx_sprints_project_id").using("btree", table.projectId.asc().nullsLast().op("uuid_ops")),
 ])
 
@@ -234,6 +245,12 @@ export const tasks = pgTable("tasks", {
 	assigneeId: uuid("assignee_id"),
 	columnStatus: taskColumnStatus("column_status").default('backlog').notNull(),
 	dueDate: date("due_date"),
+	progressPercent: integer("progress_percent").default(0).notNull(),
+	estimatedHours: numeric("estimated_hours", { precision: 6, scale: 2 }),
+	actualHours: numeric("actual_hours", { precision: 6, scale: 2 }),
+	isBlocked: boolean("is_blocked").default(false).notNull(),
+	blockedReason: text("blocked_reason"),
+	blockedAt: timestamp("blocked_at", { withTimezone: true, mode: 'string' }),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
@@ -261,6 +278,7 @@ export const tasks = pgTable("tasks", {
 		name: "tasks_sprint_id_fkey"
 	}).onDelete("set null"),
 	unique("tasks_display_id_key").on(table.projectId, table.displayId),
+	check("tasks_progress_percent_check", sql`(progress_percent >= 0) AND (progress_percent <= 100)`),
 ])
 
 export const aiPredictions = pgTable("ai_predictions", {
@@ -477,12 +495,16 @@ export const approvals = pgTable("approvals", {
 export const risks = pgTable("risks", {
 	id: uuid().defaultRandom().primaryKey().notNull(),
 	projectId: uuid("project_id").notNull(),
+	taskId: uuid("task_id"),
 	title: text().notNull(),
+	description: text(),
 	probability: riskLevel().notNull(),
 	impact: riskLevel().notNull(),
 	ownerId: uuid("owner_id"),
 	mitigation: text(),
 	status: riskStatus().default('open').notNull(),
+	source: text().default('manual').notNull(),
+	riskDomain: riskDomainEnum("risk_domain"),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
@@ -492,11 +514,65 @@ export const risks = pgTable("risks", {
 		name: "risks_project_id_fkey"
 	}).onDelete("cascade"),
 	foreignKey({
+		columns: [table.taskId],
+		foreignColumns: [tasks.id],
+		name: "risks_task_id_fkey"
+	}).onDelete("set null"),
+	foreignKey({
 		columns: [table.ownerId],
 		foreignColumns: [users.id],
 		name: "risks_owner_id_fkey"
 	}).onDelete("set null"),
 	index("idx_risks_project_id").using("btree", table.projectId.asc().nullsLast().op("uuid_ops")),
+	index("idx_risks_domain").using("btree", table.riskDomain.asc().nullsLast().op("enum_ops")),
+])
+
+export const taskComments = pgTable("task_comments", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	taskId: uuid("task_id").notNull(),
+	userId: uuid("user_id").notNull(),
+	content: text().notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.taskId],
+		foreignColumns: [tasks.id],
+		name: "task_comments_task_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.userId],
+		foreignColumns: [users.id],
+		name: "task_comments_user_id_fkey"
+	}).onDelete("cascade"),
+	index("idx_task_comments_task_id").using("btree", table.taskId.asc().nullsLast().op("uuid_ops")),
+	index("idx_task_comments_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+])
+
+export const aiInsights = pgTable("ai_insights", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	projectId: uuid("project_id").notNull(),
+	type: text().notNull(),
+	title: text().notNull(),
+	description: text().notNull(),
+	severity: text().default('medium').notNull(),
+	reasoning: jsonb(),
+	status: text().default('active').notNull(),
+	issueType: text("issue_type"),
+	entityId: uuid("entity_id"),
+	riskDomain: riskDomainEnum("risk_domain"),
+	dedupKey: text("dedup_key"),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.projectId],
+		foreignColumns: [projects.id],
+		name: "ai_insights_project_id_fkey"
+	}).onDelete("cascade"),
+	index("idx_ai_insights_project_id").using("btree", table.projectId.asc().nullsLast().op("uuid_ops")),
+	index("idx_ai_insights_type").using("btree", table.type.asc().nullsLast().op("text_ops")),
+	uniqueIndex("uq_ai_insights_dedup").using("btree", table.projectId.asc().nullsLast().op("uuid_ops"), table.type.asc().nullsLast().op("text_ops"), table.entityId.asc().nullsLast().op("uuid_ops")),
 ])
 
 export const changeRequests = pgTable("change_requests", {
@@ -634,4 +710,96 @@ export const userPreferences = pgTable("user_preferences", {
 		name: "user_preferences_user_id_fkey"
 	}).onDelete("cascade"),
 	primaryKey({ columns: [table.userId], name: "user_preferences_pkey" }),
+])
+
+export const roleChangeRequests = pgTable("role_change_requests", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	userId: uuid("user_id").notNull(),
+	organizationId: uuid("organization_id").notNull(),
+	currentRole: userRole("current_role").notNull(),
+	requestedRole: userRole("requested_role").notNull(),
+	status: roleChangeRequestStatus().default('pending').notNull(),
+	requestedBy: uuid("requested_by").notNull(),
+	decidedBy: uuid("decided_by"),
+	decidedAt: timestamp("decided_at", { withTimezone: true, mode: 'string' }),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.userId],
+		foreignColumns: [users.id],
+		name: "role_change_requests_user_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.organizationId],
+		foreignColumns: [organizations.id],
+		name: "role_change_requests_organization_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.requestedBy],
+		foreignColumns: [users.id],
+		name: "role_change_requests_requested_by_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.decidedBy],
+		foreignColumns: [users.id],
+		name: "role_change_requests_decided_by_fkey"
+	}).onDelete("set null"),
+	index("idx_role_change_requests_user").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
+	index("idx_role_change_requests_org").using("btree", table.organizationId.asc().nullsLast().op("uuid_ops")),
+	index("idx_role_change_requests_status").using("btree", table.status.asc().nullsLast().op("enum_ops")),
+	uniqueIndex("uq_role_change_requests_pending_per_user").using("btree", table.userId.asc().nullsLast().op("uuid_ops")).where(sql`status = 'pending'`),
+	check("role_change_requests_role_differs", sql`requested_role <> current_role`),
+])
+
+export const taskDependencies = pgTable("task_dependencies", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	taskId: uuid("task_id").notNull(),
+	dependsOnTaskId: uuid("depends_on_task_id").notNull(),
+	type: taskDependencyType().default('blocks').notNull(),
+	createdBy: uuid("created_by"),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.taskId],
+		foreignColumns: [tasks.id],
+		name: "task_dependencies_task_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.dependsOnTaskId],
+		foreignColumns: [tasks.id],
+		name: "task_dependencies_depends_on_task_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.createdBy],
+		foreignColumns: [users.id],
+		name: "task_dependencies_created_by_fkey"
+	}).onDelete("set null"),
+	index("idx_task_dependencies_task_id").using("btree", table.taskId.asc().nullsLast().op("uuid_ops")),
+	index("idx_task_dependencies_depends_on").using("btree", table.dependsOnTaskId.asc().nullsLast().op("uuid_ops")),
+	unique("task_dependencies_task_depends_key").on(table.taskId, table.dependsOnTaskId),
+	check("task_dependencies_no_self_dep", sql`task_id <> depends_on_task_id`),
+])
+
+export const taskAttachments = pgTable("task_attachments", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	taskId: uuid("task_id").notNull(),
+	fileName: text("file_name").notNull(),
+	storagePath: text("storage_path").notNull(),
+	storageBucket: text("storage_bucket").default('task-attachments').notNull(),
+	fileSize: bigint("file_size", { mode: "number" }).notNull(),
+	mimeType: text("mime_type"),
+	uploadedBy: uuid("uploaded_by").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.taskId],
+		foreignColumns: [tasks.id],
+		name: "task_attachments_task_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.uploadedBy],
+		foreignColumns: [users.id],
+		name: "task_attachments_uploaded_by_fkey"
+	}).onDelete("restrict"),
+	index("idx_task_attachments_task_id").using("btree", table.taskId.asc().nullsLast().op("uuid_ops")),
 ])

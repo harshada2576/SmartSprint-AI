@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ path: [".env.local", ".env"] });
 
 // Global banner so every run states the live/static boundary explicitly.
 // Static contract tests always run. Live behavioral tests require a reachable

@@ -1,8 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  buildPagination,
-  type PaginatedResult,
-} from "@/types/secondary-api";
+import { buildPaginationMeta } from "@/api/pagination";
+import type { PaginatedResult } from "@/types/api";
 
 export interface AiRecommendationListOptions {
   projectId?: string;
@@ -85,6 +83,6 @@ export async function listAiRecommendations(
   const total = count ?? 0;
   return {
     items: ((data ?? []) as unknown) as AiRecommendationListItem[],
-    pagination: buildPagination(page, pageSize, total),
+    pagination: buildPaginationMeta({ page, pageSize }, total),
   };
 }

@@ -1,394 +1,506 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { AuthenticatedLayout } from "@/components/layout/AuthenticatedLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { Progress } from "@/components/ui/Progress";
 import {
   FileText,
   Download,
   Printer,
-  FileSpreadsheet,
-  FileCode,
   BarChart3,
-  TrendingUp,
-  Users,
-  Clock,
   Target,
-  DollarSign,
   CheckCircle,
   AlertCircle,
-  Lightbulb,
-  ChevronRight,
+  Users,
+  ShieldAlert,
+  Loader2,
+  Calendar,
 } from "lucide-react";
 
-const reportCategories = [
-  { id: "executive", label: "Executive Summary", icon: FileText },
-  { id: "project", label: "Project Report", icon: BarChart3 },
-  { id: "requirements", label: "Requirements Report", icon: CheckCircle },
-  { id: "sprint", label: "Sprint Report", icon: Target },
-  { id: "budget", label: "Budget Report", icon: DollarSign },
-  { id: "timeline", label: "Timeline Report", icon: Clock },
-  { id: "contribution", label: "Contribution Report", icon: Users },
-  { id: "ai", label: "AI Recommendations", icon: Lightbulb },
-  { id: "variance", label: "Expected vs Actual", icon: TrendingUp },
-];
+interface Project {
+  id: string;
+  name: string;
+}
 
-const sprintReport = {
-  sprint: "Sprint 4",
-  goal: "Complete payment integration and checkout flow",
-  duration: "Jul 14 - Jul 28, 2025",
-  completion: 72,
-  velocity: 32,
-  totalPoints: 56,
-  completedPoints: 40,
-  pendingPoints: 10,
-  carryForward: 6,
-  blocked: 0,
-};
-
-const teamContributions = [
-  { member: "John Smith", assigned: 8, completed: 6, points: 24, hours: 78, contribution: 28 },
-  { member: "Sarah Chen", assigned: 6, completed: 5, points: 18, hours: 72, contribution: 22 },
-  { member: "Mike Johnson", assigned: 10, completed: 7, points: 26, hours: 85, contribution: 25 },
-  { member: "Emily Davis", assigned: 7, completed: 4, points: 16, hours: 64, contribution: 15 },
-  { member: "David Wilson", assigned: 5, completed: 4, points: 12, hours: 48, contribution: 10 },
-];
-
-const budgetReport = {
-  totalBudget: 200000,
-  spent: 145000,
-  remaining: 55000,
-  variance: 5,
-  categories: [
-    { name: "Development", budget: 120000, spent: 95000 },
-    { name: "Design", budget: 30000, spent: 25000 },
-    { name: "Testing", budget: 25000, spent: 15000 },
-    { name: "Infrastructure", budget: 25000, spent: 10000 },
-  ],
-};
+interface Sprint {
+  id: string;
+  name: string;
+  projectId: string;
+  status: string;
+}
 
 export default function ReportsPage() {
-  const router = useRouter();
-  const [selectedCategory, setSelectedCategory] = React.useState("sprint");
+  const [reportType, setReportType] = React.useState<"project" | "sprint">("project");
+  const [projects, setProjects] = React.useState<Project[]>([]);
+  const [sprints, setSprints] = React.useState<Sprint[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = React.useState<string>("");
+  const [selectedSprintId, setSelectedSprintId] = React.useState<string>("");
+
+  const [loading, setLoading] = React.useState<boolean>(true);
+  const [reportLoading, setReportLoading] = React.useState<boolean>(false);
+  const [reportData, setReportData] = React.useState<any>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Load projects and sprints
+  React.useEffect(() => {
+    async function loadInitial() {
+      try {
+        const [projRes, sprintRes] = await Promise.all([
+          fetch("/api/projects"),
+          fetch("/api/sprints"),
+        ]);
+        if (projRes.ok) {
+          const pData = await projRes.json();
+          const pList = pData.projects || pData.data || [];
+          setProjects(pList);
+          if (pList.length > 0) setSelectedProjectId(pList[0].id);
+        }
+        if (sprintRes.ok) {
+          const sData = await sprintRes.json();
+          const sList = sData.data || [];
+          setSprints(sList);
+          if (sList.length > 0) setSelectedSprintId(sList[0].id);
+        }
+      } catch (err) {
+        console.error("Failed to load initial data", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadInitial();
+  }, []);
+
+  // Fetch report data
+  const fetchReport = React.useCallback(async () => {
+    if (reportType === "project") {
+      if (!selectedProjectId) return;
+      setReportLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/reports/project/${selectedProjectId}`);
+        if (!res.ok) throw new Error("Failed to fetch project report");
+        const json = await res.json();
+        setReportData(json.data);
+      } catch (err: any) {
+        setError(err.message || "Failed to load report");
+      } finally {
+        setReportLoading(false);
+      }
+    } else {
+      if (!selectedSprintId) return;
+      setReportLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/reports/sprint/${selectedSprintId}`);
+        if (!res.ok) throw new Error("Failed to fetch sprint report");
+        const json = await res.json();
+        setReportData(json.data);
+      } catch (err: any) {
+        setError(err.message || "Failed to load report");
+      } finally {
+        setReportLoading(false);
+      }
+    }
+  }, [reportType, selectedProjectId, selectedSprintId]);
+
+  React.useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
+
+  const handleExportCsv = () => {
+    if (reportType === "project" && selectedProjectId) {
+      window.open(`/api/reports/project/${selectedProjectId}?format=csv`, "_blank");
+    } else if (reportType === "sprint" && selectedSprintId) {
+      window.open(`/api/reports/sprint/${selectedSprintId}?format=csv`, "_blank");
+    }
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
 
   return (
     <AuthenticatedLayout>
       <PageHeader
         title="Reports Center"
-        description="Generate and export professional reports"
+        description="Comprehensive real-time project statistics and sprint summaries"
         breadcrumb={[
           { label: "Dashboard", href: "/dashboard" },
           { label: "Reports" },
         ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={!reportData}>
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={handlePrint} disabled={!reportData}>
+              <Printer className="w-4 h-4 mr-2" />
+              Print
+            </Button>
+          </div>
+        }
       />
 
-      <div className="grid lg:grid-cols-4 gap-6">
-        {/* Sidebar - Report Categories */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Report Categories</CardTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-6">
+        {/* Report Selector Controls */}
+        <div className="lg:col-span-1 space-y-4">
+          <Card className="border border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Report Type</CardTitle>
+              <CardDescription>Select report scope</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
-              <div className="divide-y divide-slate-100">
-                {reportCategories.map((category) => (
-                  <button
-                    key={category.id}
-                    onClick={() => setSelectedCategory(category.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left text-sm transition-colors ${
-                      selectedCategory === category.id
-                        ? "bg-slate-50 text-slate-900 font-medium"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    <category.icon className="h-4 w-4" />
-                    {category.label}
-                    {selectedCategory === category.id && (
-                      <ChevronRight className="h-4 w-4 ml-auto" />
-                    )}
-                  </button>
-                ))}
-              </div>
+            <CardContent className="space-y-2">
+              <Button
+                variant={reportType === "project" ? "primary" : "outline"}
+                className="w-full justify-start text-sm"
+                onClick={() => setReportType("project")}
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Project Report
+              </Button>
+              <Button
+                variant={reportType === "sprint" ? "primary" : "outline"}
+                className="w-full justify-start text-sm"
+                onClick={() => setReportType("sprint")}
+              >
+                <Target className="w-4 h-4 mr-2" />
+                Sprint Report
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                {reportType === "project" ? "Select Project" : "Select Sprint"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {reportType === "project" ? (
+                <select
+                  aria-label="Select Project"
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full bg-card text-card-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  aria-label="Select Sprint"
+                  value={selectedSprintId}
+                  onChange={(e) => setSelectedSprintId(e.target.value)}
+                  className="w-full bg-card text-card-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                >
+                  {sprints.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.status})
+                    </option>
+                  ))}
+                </select>
+              )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Main Content - Report Preview */}
-        <div className="lg:col-span-3 space-y-6">
-          {/* Report Header */}
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900">
-                {reportCategories.find((c) => c.id === selectedCategory)?.label}
-              </h2>
-              <p className="text-slate-500 mt-1">
-                Generated on {new Date().toLocaleDateString()}
-              </p>
+        {/* Report Content */}
+        <div className="lg:col-span-3">
+          {reportLoading ? (
+            <div className="flex flex-col items-center justify-center p-12 text-muted-foreground border border-border rounded-lg bg-card">
+              <Loader2 className="w-8 h-8 animate-spin mb-4 text-primary" />
+              <p>Compiling real-time report metrics...</p>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" size="sm" leftIcon={<FileText className="h-4 w-4" />}>
-                PDF
-              </Button>
-              <Button variant="secondary" size="sm" leftIcon={<FileSpreadsheet className="h-4 w-4" />}>
-                Excel
-              </Button>
-              <Button variant="secondary" size="sm" leftIcon={<FileCode className="h-4 w-4" />}>
-                CSV
-              </Button>
-            </div>
-          </div>
-
-          {selectedCategory === "sprint" && (
-            <>
-              {/* Sprint Summary */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sprint Summary</CardTitle>
-                  <CardDescription>
-                    {sprintReport.sprint} • {sprintReport.duration}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid sm:grid-cols-4 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Completion</p>
-                      <p className="text-2xl font-bold text-slate-900">
-                        {sprintReport.completion}%
-                      </p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Velocity</p>
-                      <p className="text-2xl font-bold text-slate-900">
-                        {sprintReport.velocity}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Completed</p>
-                      <p className="text-2xl font-bold text-emerald-600">
-                        {sprintReport.completedPoints}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Pending</p>
-                      <p className="text-2xl font-bold text-amber-600">
-                        {sprintReport.pendingPoints}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Team Contribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Team Contribution</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead className="border-b border-slate-200 bg-slate-50/50">
-                      <tr>
-                        <th className="h-10 px-4 text-left text-xs font-medium text-slate-500 uppercase">
-                          Member
-                        </th>
-                        <th className="h-10 px-4 text-center text-xs font-medium text-slate-500 uppercase">
-                          Assigned
-                        </th>
-                        <th className="h-10 px-4 text-center text-xs font-medium text-slate-500 uppercase">
-                          Completed
-                        </th>
-                        <th className="h-10 px-4 text-center text-xs font-medium text-slate-500 uppercase">
-                          Story Points
-                        </th>
-                        <th className="h-10 px-4 text-center text-xs font-medium text-slate-500 uppercase">
-                          Hours
-                        </th>
-                        <th className="h-10 px-4 text-center text-xs font-medium text-slate-500 uppercase">
-                          Contribution
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {teamContributions.map((member) => (
-                        <tr key={member.member}>
-                          <td className="px-4 py-3 font-medium text-slate-900">
-                            {member.member}
-                          </td>
-                          <td className="px-4 py-3 text-center">{member.assigned}</td>
-                          <td className="px-4 py-3 text-center text-emerald-600">
-                            {member.completed}
-                          </td>
-                          <td className="px-4 py-3 text-center">{member.points}</td>
-                          <td className="px-4 py-3 text-center">{member.hours}</td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-2">
-                              <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-slate-900 rounded-full"
-                                  style={{ width: `${member.contribution}%` }}
-                                />
-                              </div>
-                              <span className="text-sm text-slate-600">
-                                {member.contribution}%
-                              </span>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-
-              {/* Sprint Review */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sprint Review</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-900 mb-2">
-                      Achievements
-                    </h4>
-                    <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
-                      <li>Successfully integrated payment gateway</li>
-                      <li>Completed user authentication system</li>
-                      <li>Achieved 72% sprint completion rate</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-900 mb-2">
-                      Issues
-                    </h4>
-                    <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
-                      <li>Payment API rate limiting caused delays</li>
-                      <li>3 tasks carried forward to next sprint</li>
-                    </ul>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h4 className="text-sm font-medium text-slate-900 mb-2">
-                      Recommendations
-                    </h4>
-                    <p className="text-sm text-slate-600">
-                      Consider increasing sprint capacity for Sprint 5 based on
-                      improved velocity. Focus on completing carried-forward
-                      tasks before starting new ones.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {selectedCategory === "budget" && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Budget Summary</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid sm:grid-cols-4 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Total Budget</p>
-                      <p className="text-2xl font-bold text-slate-900">
-                        ${budgetReport.totalBudget.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Spent</p>
-                      <p className="text-2xl font-bold text-amber-600">
-                        ${budgetReport.spent.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Remaining</p>
-                      <p className="text-2xl font-bold text-emerald-600">
-                        ${budgetReport.remaining.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase">Variance</p>
-                      <p className="text-2xl font-bold text-slate-900">
-                        +{budgetReport.variance}%
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Cost Categories</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <table className="w-full">
-                    <thead className="border-b border-slate-200 bg-slate-50/50">
-                      <tr>
-                        <th className="h-10 px-4 text-left text-xs font-medium text-slate-500 uppercase">
-                          Category
-                        </th>
-                        <th className="h-10 px-4 text-right text-xs font-medium text-slate-500 uppercase">
-                          Budget
-                        </th>
-                        <th className="h-10 px-4 text-right text-xs font-medium text-slate-500 uppercase">
-                          Spent
-                        </th>
-                        <th className="h-10 px-4 text-right text-xs font-medium text-slate-500 uppercase">
-                          Variance
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {budgetReport.categories.map((cat) => (
-                        <tr key={cat.name}>
-                          <td className="px-4 py-3 font-medium text-slate-900">
-                            {cat.name}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            ${cat.budget.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            ${cat.spent.toLocaleString()}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span
-                              className={
-                                cat.spent > cat.budget
-                                  ? "text-rose-600"
-                                  : "text-emerald-600"
-                              }
-                            >
-                              {((cat.spent / cat.budget - 1) * 100).toFixed(1)}%
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </CardContent>
-              </Card>
-            </>
-          )}
-
-          {selectedCategory !== "sprint" && selectedCategory !== "budget" && (
-            <Card>
-              <CardContent className="p-12 text-center">
-                <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900 mb-2">
-                  Report Preview
-                </h3>
-                <p className="text-slate-500 max-w-md mx-auto">
-                  Select a report category to view detailed insights and export
-                  options.
-                </p>
-              </CardContent>
+          ) : error ? (
+            <Card className="p-6 border-red-500/30 bg-red-500/5">
+              <div className="flex items-center gap-3 text-red-500">
+                <AlertCircle className="w-6 h-6" />
+                <div>
+                  <h4 className="font-semibold">Unable to load report</h4>
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              </div>
             </Card>
-          )}
+          ) : reportType === "project" && reportData ? (
+            <div className="space-y-6">
+              {/* Project Header Info */}
+              <Card className="border border-border">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-2xl font-bold">{reportData.project.name}</CardTitle>
+                      <CardDescription className="mt-1">
+                        {reportData.project.description || "No project description provided"}
+                      </CardDescription>
+                    </div>
+                    <Badge variant={reportData.project.status === "active" ? "success" : "outline"}>
+                      {reportData.project.status.toUpperCase()}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Overall Progress</div>
+                      <div className="text-2xl font-bold mt-1">{reportData.summary.progressPercent}%</div>
+                      <Progress value={reportData.summary.progressPercent} className="h-1.5 mt-2" />
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Tasks (Done/Total)</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.completedTasks} / {reportData.summary.totalTasks}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Story Points</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.completedPoints} / {reportData.summary.totalPoints}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Sprints (Active/Total)</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.activeSprints} / {reportData.summary.totalSprints}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Developer Workload in Project */}
+              <Card className="border border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" />
+                    Developer Workload & Velocity
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {reportData.developerWorkload.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border text-muted-foreground text-left">
+                            <th className="pb-2 font-medium">Developer</th>
+                            <th className="pb-2 font-medium text-center">Active</th>
+                            <th className="pb-2 font-medium text-center">Completed</th>
+                            <th className="pb-2 font-medium text-right">Points</th>
+                            <th className="pb-2 font-medium text-right">Hours</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {reportData.developerWorkload.map((dev: any) => (
+                            <tr key={dev.userId} className="hover:bg-muted/30">
+                              <td className="py-2.5 font-medium">{dev.name}</td>
+                              <td className="py-2.5 text-center">{dev.activeTasks}</td>
+                              <td className="py-2.5 text-center text-muted-foreground">{dev.completedTasks}</td>
+                              <td className="py-2.5 text-right font-mono">{dev.totalPoints} pts</td>
+                              <td className="py-2.5 text-right font-mono">{dev.totalHours}h</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      No team members assigned tasks in this project yet.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Blocked & Risk Summary */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card className="border border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                      Blocked Work ({reportData.summary.blockedTasks})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {reportData.tasks.filter((t: any) => t.isBlocked).length > 0 ? (
+                      <div className="space-y-2">
+                        {reportData.tasks
+                          .filter((t: any) => t.isBlocked)
+                          .map((t: any) => (
+                            <div key={t.id} className="p-2 border border-border rounded text-xs bg-red-500/5">
+                              <div className="font-semibold text-foreground">{t.title}</div>
+                              <div className="text-red-400 mt-1">Reason: {t.blockedReason || "None provided"}</div>
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-2">No tasks are currently blocked.</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <ShieldAlert className="w-4 h-4 text-amber-500" />
+                      Active Risks ({reportData.summary.openRisks})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {reportData.risks.filter((r: any) => r.status === "open").length > 0 ? (
+                      <div className="space-y-2">
+                        {reportData.risks
+                          .filter((r: any) => r.status === "open")
+                          .slice(0, 3)
+                          .map((r: any) => (
+                            <div key={r.id} className="p-2 border border-border rounded text-xs">
+                              <div className="font-semibold text-foreground flex justify-between">
+                                <span>{r.title}</span>
+                                <Badge variant="danger" className="text-[10px] uppercase">{r.severity}</Badge>
+                              </div>
+                              {r.mitigation && <div className="text-muted-foreground mt-1">{r.mitigation}</div>}
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-2">No open risks registered.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          ) : reportType === "sprint" && reportData ? (
+            <div className="space-y-6">
+              {/* Sprint Summary */}
+              <Card className="border border-border">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle className="text-2xl font-bold">{reportData.sprint.name}</CardTitle>
+                      <CardDescription className="mt-1">
+                        Goal: {reportData.sprint.goal || "No sprint goal defined"}
+                      </CardDescription>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Dates: {reportData.sprint.startDate || "N/A"} → {reportData.sprint.endDate || "N/A"}
+                      </div>
+                    </div>
+                    <Badge variant={reportData.sprint.status === "active" ? "info" : "outline"}>
+                      {reportData.sprint.status.toUpperCase()}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Completion Rate</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.completionPercentage}%
+                      </div>
+                      <Progress value={reportData.summary.completionPercentage} className="h-1.5 mt-2" />
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Velocity (Points Done)</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.velocity} pts
+                      </div>
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Completed Tasks</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.completedTasks} / {reportData.summary.plannedTasks}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-muted/40 rounded-lg">
+                      <div className="text-xs text-muted-foreground">Incomplete / Blocked</div>
+                      <div className="text-2xl font-bold mt-1">
+                        {reportData.summary.incompleteTasks} / {reportData.summary.blockedTasks}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Developer Contribution */}
+              <Card className="border border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" />
+                    Sprint Developer Contribution
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {reportData.developerContribution.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border text-muted-foreground text-left">
+                            <th className="pb-2 font-medium">Developer</th>
+                            <th className="pb-2 font-medium text-center">Assigned</th>
+                            <th className="pb-2 font-medium text-center">Completed</th>
+                            <th className="pb-2 font-medium text-right">Points</th>
+                            <th className="pb-2 font-medium text-right">Contribution %</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {reportData.developerContribution.map((dev: any) => (
+                            <tr key={dev.userId} className="hover:bg-muted/30">
+                              <td className="py-2.5 font-medium">{dev.name}</td>
+                              <td className="py-2.5 text-center">{dev.assigned}</td>
+                              <td className="py-2.5 text-center text-muted-foreground">{dev.completed}</td>
+                              <td className="py-2.5 text-right font-mono">{dev.points} pts</td>
+                              <td className="py-2.5 text-right font-semibold">{dev.contributionPercent}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      No developers assigned tasks in this sprint.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Sprint Tasks List */}
+              <Card className="border border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Target className="w-4 h-4 text-primary" />
+                    Sprint Tasks Breakdown
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="divide-y divide-border text-sm">
+                    {reportData.tasks.map((task: any) => (
+                      <div key={task.id} className="py-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="font-medium">{task.title}</span>
+                          {task.isBlocked && (
+                            <Badge variant="danger" className="text-[10px]">
+                              BLOCKED
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span>{task.assignee}</span>
+                          <span className="font-mono">{task.points} pts</span>
+                          <Badge variant="outline" className="uppercase text-[10px]">
+                            {task.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ) : null}
         </div>
       </div>
     </AuthenticatedLayout>
