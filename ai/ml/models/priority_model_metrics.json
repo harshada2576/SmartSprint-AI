@@ -1,0 +1,27 @@
+{
+  "model": "RandomForestClassifier",
+  "target": "priority",
+  "features": [
+    "category",
+    "business_value",
+    "customer_importance",
+    "urgency",
+    "complexity",
+    "estimated_effort",
+    "risk",
+    "story_points"
+  ],
+  "training_samples": 496,
+  "testing_samples": 124,
+  "accuracy": 0.5403,
+  "classes": [
+    "high",
+    "low",
+    "medium"
+  ],
+  "class_distribution": {
+    "medium": 345,
+    "low": 165,
+    "high": 110
+  }
+}

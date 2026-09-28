@@ -1,0 +1,38 @@
+{
+  "model": "XGBoost",
+  "target": "priority",
+  "classes": [
+    "low",
+    "medium",
+    "high"
+  ],
+  "features": [
+    "category",
+    "business_value",
+    "customer_importance",
+    "urgency",
+    "risk"
+  ],
+  "categorical_features": [
+    "category",
+    "business_value"
+  ],
+  "training_records": 620,
+  "parameters": {
+    "n_estimators": 100,
+    "max_depth": 2,
+    "learning_rate": 0.08,
+    "min_child_weight": 5,
+    "subsample": 0.9,
+    "colsample_bytree": 0.8,
+    "gamma": 0
+  },
+  "validation": {
+    "cv_accuracy": 0.6048,
+    "cv_accuracy_std": 0.0275,
+    "cv_macro_f1": 0.5065,
+    "cv_macro_f1_std": 0.0265,
+    "cv_balanced_accuracy": 0.492,
+    "cv_balanced_accuracy_std": 0.0248
+  }
+}

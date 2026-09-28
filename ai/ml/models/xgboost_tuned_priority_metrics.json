@@ -1,0 +1,29 @@
+{
+  "model": "XGBClassifier - Tuned",
+  "target": "priority",
+  "features": [
+    "category",
+    "business_value",
+    "customer_importance",
+    "urgency",
+    "complexity",
+    "estimated_effort",
+    "risk",
+    "story_points"
+  ],
+  "training_samples": 496,
+  "testing_samples": 124,
+  "best_cv_macro_f1": 0.5283,
+  "test_accuracy": 0.6371,
+  "test_macro_f1": 0.6093,
+  "test_balanced_accuracy": 0.626,
+  "best_parameters": {
+    "model__subsample": 0.8,
+    "model__n_estimators": 200,
+    "model__min_child_weight": 7,
+    "model__max_depth": 6,
+    "model__learning_rate": 0.05,
+    "model__gamma": 0.1,
+    "model__colsample_bytree": 0.9
+  }
+}
