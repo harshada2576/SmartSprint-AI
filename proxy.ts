@@ -26,6 +26,9 @@ const PROTECTED_PREFIXES = [
   "/team",
   "/settings",
   "/calendar",
+  "/admin",
+  "/ai-assistant",
+  "/risks",
 ];
 
 const AUTH_PAGES = ["/login", "/register", "/forgot-password", "/reset-password"];
