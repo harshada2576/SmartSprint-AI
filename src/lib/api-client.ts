@@ -105,7 +105,9 @@ function toStringArray(value: unknown): string[] {
       (entry): entry is string => typeof entry === "string" && entry.length > 0,
     );
   }
+
   if (typeof value === "string" && value.length > 0) return [value];
+
   return [];
 }
 
@@ -113,8 +115,11 @@ function readErrorPayload(
   payload: unknown,
 ): { code: ApiErrorCode; message: string } | null {
   if (!isRecord(payload) || !isRecord(payload.error)) return null;
+
   const { code, message } = payload.error;
+
   if (typeof message !== "string" || message.length === 0) return null;
+
   const known: ApiErrorCode[] = [
     "UNAUTHENTICATED",
     "FORBIDDEN",
@@ -122,6 +127,7 @@ function readErrorPayload(
     "VALIDATION_ERROR",
     "INTERNAL_ERROR",
   ];
+
   return {
     code:
       typeof code === "string" &&
@@ -141,6 +147,7 @@ function normalizePagination(value: unknown): PaginationMeta {
       totalPages: toNumberOr(value.totalPages, 0),
     };
   }
+
   return { page: 1, pageSize: 20, total: 0, totalPages: 0 };
 }
 
@@ -153,13 +160,19 @@ export type QueryValue = string | number | boolean | undefined | null;
 /** Builds `?a=1&b=2`, skipping undefined/null/empty values. */
 export function buildQuery(params: Record<string, QueryValue>): string {
   const search = new URLSearchParams();
+
   for (const [key, value] of Object.entries(params)) {
     if (value === undefined || value === null) continue;
+
     const text = String(value).trim();
+
     if (text.length === 0) continue;
+
     search.set(key, text);
   }
+
   const encoded = search.toString();
+
   return encoded.length > 0 ? `?${encoded}` : "";
 }
 
@@ -177,6 +190,7 @@ function throwForStatus(
   fallback: string,
 ): never {
   const parsed = payload !== null ? readErrorPayload(payload) : null;
+
   if (response.status === 401) {
     throw new ApiError(
       "UNAUTHENTICATED",
@@ -184,6 +198,7 @@ function throwForStatus(
       401,
     );
   }
+
   throw new ApiError(
     parsed?.code ?? "INTERNAL_ERROR",
     parsed?.message ?? `${fallback} (HTTP ${response.status}).`,
@@ -197,6 +212,7 @@ async function getJson(
   fallback: string,
 ): Promise<unknown> {
   let response: Response;
+
   try {
     response = await fetch(url, {
       method: "GET",
@@ -206,23 +222,32 @@ async function getJson(
       signal,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError")
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
+    }
+
     throw new ApiError(
       "NETWORK_ERROR",
       "Could not reach the server. Check your connection and try again.",
     );
   }
+
   const payload = await parseJson(response);
-  if (!response.ok) throwForStatus(response, payload, fallback);
+
+  if (!response.ok) {
+    throwForStatus(response, payload, fallback);
+  }
+
   if (!isRecord(payload) || payload.success !== true) {
     const parsed = payload !== null ? readErrorPayload(payload) : null;
+
     throw new ApiError(
       parsed?.code ?? "INTERNAL_ERROR",
       parsed?.message ?? "The server returned an unexpected response.",
       response.status,
     );
   }
+
   return payload;
 }
 
@@ -240,20 +265,29 @@ export async function fetchCollection<T>(
   },
 ): Promise<CollectionResult<T>> {
   const url = `${endpoint}${buildQuery(options?.params ?? {})}`;
+
   const payload = await getJson(
     url,
     options?.signal,
     options?.fallback ?? "Request failed",
   );
+
   if (!isRecord(payload)) {
-    throw new ApiError("INTERNAL_ERROR", "The server returned an unexpected response.");
+    throw new ApiError(
+      "INTERNAL_ERROR",
+      "The server returned an unexpected response.",
+    );
   }
+
   const raw = Array.isArray(payload.data) ? payload.data : [];
   const items: T[] = [];
+
   for (const entry of raw) {
     const item = normalize(entry);
+
     if (item !== null) items.push(item);
   }
+
   return {
     items,
     pagination: normalizePagination(payload.pagination),
@@ -272,33 +306,50 @@ export async function postJson<T>(
   options?: { signal?: AbortSignal; fallback?: string },
 ): Promise<T | null> {
   let response: Response;
+
   try {
     response = await fetch(endpoint, {
       method: "POST",
       credentials: "same-origin",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
       cache: "no-store",
       body: JSON.stringify(body),
       signal: options?.signal,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError")
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
+    }
+
     throw new ApiError(
       "NETWORK_ERROR",
       "Could not reach the server. Check your connection and try again.",
     );
   }
+
   const payload = await parseJson(response);
-  if (!response.ok) throwForStatus(response, payload, options?.fallback ?? "Create failed");
+
+  if (!response.ok) {
+    throwForStatus(
+      response,
+      payload,
+      options?.fallback ?? "Create failed",
+    );
+  }
+
   if (!isRecord(payload) || payload.success !== true) {
     const parsed = payload !== null ? readErrorPayload(payload) : null;
+
     throw new ApiError(
       parsed?.code ?? "INTERNAL_ERROR",
       parsed?.message ?? "The server returned an unexpected response.",
       response.status,
     );
   }
+
   return normalize(payload.data);
 }
 
@@ -313,33 +364,50 @@ export async function patchJson<T>(
   options?: { signal?: AbortSignal; fallback?: string },
 ): Promise<T | null> {
   let response: Response;
+
   try {
     response = await fetch(endpoint, {
       method: "PATCH",
       credentials: "same-origin",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
       cache: "no-store",
       body: JSON.stringify(body),
       signal: options?.signal,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError")
+    if (error instanceof DOMException && error.name === "AbortError") {
       throw error;
+    }
+
     throw new ApiError(
       "NETWORK_ERROR",
       "Could not reach the server. Check your connection and try again.",
     );
   }
+
   const payload = await parseJson(response);
-  if (!response.ok) throwForStatus(response, payload, options?.fallback ?? "Update failed");
+
+  if (!response.ok) {
+    throwForStatus(
+      response,
+      payload,
+      options?.fallback ?? "Update failed",
+    );
+  }
+
   if (!isRecord(payload) || payload.success !== true) {
     const parsed = payload !== null ? readErrorPayload(payload) : null;
+
     throw new ApiError(
       parsed?.code ?? "INTERNAL_ERROR",
       parsed?.message ?? "The server returned an unexpected response.",
       response.status,
     );
   }
+
   return normalize(payload.data);
 }
 
@@ -369,7 +437,9 @@ export function useCollection<T>(
   query = "",
 ): UseCollectionResult<T> {
   const key = `${endpoint}${query}`;
+
   const [attempt, setAttempt] = React.useState(0);
+
   const [snapshot, setSnapshot] = React.useState<{
     key: string;
     items: T[];
@@ -380,53 +450,85 @@ export function useCollection<T>(
 
   React.useEffect(() => {
     let cancelled = false;
+
     const controller = new AbortController();
+
     (async () => {
       try {
-        const payload = await getJson(key, controller.signal, "Could not load data");
+        const payload = await getJson(
+          key,
+          controller.signal,
+          "Could not load data",
+        );
+
         if (!isRecord(payload)) {
           throw new ApiError(
             "INTERNAL_ERROR",
             "The server returned an unexpected response.",
           );
         }
-        const raw = Array.isArray(payload.data) ? payload.data : [];
+
+        const raw = Array.isArray(payload.data)
+          ? payload.data
+          : [];
+
         const next: T[] = [];
+
         for (const entry of raw) {
           const item = normalize(entry);
+
           if (item !== null) next.push(item);
         }
+
         if (cancelled) return;
+
         setSnapshot({
           key,
           items: next,
-          pagination: normalizePagination(payload.pagination),
-          meta: isRecord(payload.meta) ? payload.meta : {},
+          pagination: normalizePagination(
+            payload.pagination,
+          ),
+          meta: isRecord(payload.meta)
+            ? payload.meta
+            : {},
           error: null,
         });
       } catch (fetchError: unknown) {
         if (cancelled) return;
+
         if (
           fetchError instanceof DOMException &&
           fetchError.name === "AbortError"
-        )
+        ) {
           return;
+        }
+
         setSnapshot({
           key,
           items: [],
-          pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+          pagination: {
+            page: 1,
+            pageSize: 20,
+            total: 0,
+            totalPages: 0,
+          },
           meta: {},
           error:
             fetchError instanceof ApiError
               ? fetchError
-              : new ApiError("INTERNAL_ERROR", "Something went wrong loading data."),
+              : new ApiError(
+                  "INTERNAL_ERROR",
+                  "Something went wrong loading data.",
+                ),
         });
       }
     })();
+
     return () => {
       cancelled = true;
       controller.abort();
     };
+
     // `key` fully describes the request; `normalize` is a module-level pure
     // function and `attempt` is the manual retry counter.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -436,15 +538,20 @@ export function useCollection<T>(
     setAttempt((count) => count + 1);
   }, []);
 
-  const current = snapshot !== null && snapshot.key === key ? snapshot : null;
+  const current =
+    snapshot !== null && snapshot.key === key
+      ? snapshot
+      : null;
+
   return {
     items: current?.items ?? [],
-    pagination: current?.pagination ?? {
-      page: 1,
-      pageSize: 20,
-      total: 0,
-      totalPages: 0,
-    },
+    pagination:
+      current?.pagination ?? {
+        page: 1,
+        pageSize: 20,
+        total: 0,
+        totalPages: 0,
+      },
     meta: current?.meta ?? {},
     error: current?.error ?? null,
     isLoading: current === null,
@@ -455,6 +562,7 @@ export function useCollection<T>(
 export interface StatusCounts {
   /** Total across all statuses (unfiltered `pageSize=1` probe). */
   total: number;
+
   /** Total per requested status value. */
   byStatus: Record<string, number>;
 }
@@ -467,96 +575,203 @@ export interface StatusCounts {
 export function useStatusCounts(
   endpoint: string,
   statuses: string[],
-): { counts: StatusCounts; error: ApiError | null; isLoading: boolean; retry: () => void } {
-  const [attempt, setAttempt] = React.useState(0);
-  const [snapshot, setSnapshot] = React.useState<{
-    key: string;
-    counts: StatusCounts;
-    error: ApiError | null;
-  } | null>(null);
+): {
+  counts: StatusCounts;
+  error: ApiError | null;
+  isLoading: boolean;
+  retry: () => void;
+} {
+  const [attempt, setAttempt] =
+    React.useState(0);
+
+  const [snapshot, setSnapshot] =
+    React.useState<{
+      key: string;
+      counts: StatusCounts;
+      error: ApiError | null;
+    } | null>(null);
+
   const key = React.useMemo(
-    () => JSON.stringify({ endpoint, statuses }),
+    () =>
+      JSON.stringify({
+        endpoint,
+        statuses,
+      }),
     [endpoint, statuses],
   );
 
   React.useEffect(() => {
     let cancelled = false;
-    const controller = new AbortController();
+
+    const controller =
+      new AbortController();
+
     (async () => {
       try {
-        const probes: Array<{ status: string | null; promise: Promise<CollectionResult<unknown>> }> = [
+        const probes: Array<{
+          status: string | null;
+          promise: Promise<
+            CollectionResult<unknown>
+          >;
+        }> = [
           {
             status: null,
-            promise: fetchCollection<unknown>(endpoint, () => null, {
-              signal: controller.signal,
-              params: { page: 1, pageSize: 1 },
-              fallback: "Could not load counts",
-            }),
+            promise:
+              fetchCollection<unknown>(
+                endpoint,
+                () => null,
+                {
+                  signal:
+                    controller.signal,
+                  params: {
+                    page: 1,
+                    pageSize: 1,
+                  },
+                  fallback:
+                    "Could not load counts",
+                },
+              ),
           },
+
           ...statuses.map((status) => ({
             status,
-            promise: fetchCollection<unknown>(endpoint, () => null, {
-              signal: controller.signal,
-              params: { page: 1, pageSize: 1, status },
-              fallback: "Could not load counts",
-            }),
+            promise:
+              fetchCollection<unknown>(
+                endpoint,
+                () => null,
+                {
+                  signal:
+                    controller.signal,
+                  params: {
+                    page: 1,
+                    pageSize: 1,
+                    status,
+                  },
+                  fallback:
+                    "Could not load counts",
+                },
+              ),
           })),
         ];
-        const settled = await Promise.all(probes.map((probe) => probe.promise));
+
+        const settled =
+          await Promise.all(
+            probes.map(
+              (probe) => probe.promise,
+            ),
+          );
+
         if (cancelled) return;
-        const byStatus: Record<string, number> = {};
-        settled.forEach((result, index) => {
-          const status = probes[index]?.status;
-          if (status !== null && status !== undefined) {
-            byStatus[status] = result.pagination.total;
-          }
-        });
+
+        const byStatus: Record<
+          string,
+          number
+        > = {};
+
+        settled.forEach(
+          (result, index) => {
+            const status =
+              probes[index]?.status;
+
+            if (
+              status !== null &&
+              status !== undefined
+            ) {
+              byStatus[status] =
+                result.pagination.total;
+            }
+          },
+        );
+
         setSnapshot({
           key,
-          counts: { total: settled[0]?.pagination.total ?? 0, byStatus },
+          counts: {
+            total:
+              settled[0]?.pagination
+                .total ?? 0,
+            byStatus,
+          },
           error: null,
         });
       } catch (fetchError: unknown) {
         if (cancelled) return;
-        if (fetchError instanceof DOMException && fetchError.name === "AbortError")
+
+        if (
+          fetchError instanceof DOMException &&
+          fetchError.name === "AbortError"
+        ) {
           return;
+        }
+
         setSnapshot({
           key,
-          counts: { total: 0, byStatus: {} },
+          counts: {
+            total: 0,
+            byStatus: {},
+          },
           error:
             fetchError instanceof ApiError
               ? fetchError
-              : new ApiError("INTERNAL_ERROR", "Something went wrong loading counts."),
+              : new ApiError(
+                  "INTERNAL_ERROR",
+                  "Something went wrong loading counts.",
+                ),
         });
       }
     })();
+
     return () => {
       cancelled = true;
       controller.abort();
     };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, attempt]);
 
-  const retry = React.useCallback(() => {
-    setAttempt((count) => count + 1);
-  }, []);
+  const retry = React.useCallback(
+    () => {
+      setAttempt((count) => count + 1);
+    },
+    [],
+  );
 
-  const current = snapshot !== null && snapshot.key === key ? snapshot : null;
+  const current =
+    snapshot !== null &&
+    snapshot.key === key
+      ? snapshot
+      : null;
+
   return {
-    counts: current?.counts ?? { total: 0, byStatus: {} },
-    error: current?.error ?? null,
-    isLoading: current === null,
+    counts:
+      current?.counts ?? {
+        total: 0,
+        byStatus: {},
+      },
+    error:
+      current?.error ?? null,
+    isLoading:
+      current === null,
     retry,
   };
 }
 
 /** Debounces a fast-changing input (e.g. search) before it becomes a query. */
-export function useDebouncedValue<T>(value: T, delayMs = 300): T {
-  const [debounced, setDebounced] = React.useState(value);
+export function useDebouncedValue<T>(
+  value: T,
+  delayMs = 300,
+): T {
+  const [debounced, setDebounced] =
+    React.useState(value);
+
   React.useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
+    const timer = setTimeout(
+      () => setDebounced(value),
+      delayMs,
+    );
+
     return () => clearTimeout(timer);
   }, [value, delayMs]);
+
   return debounced;
 }
 
@@ -569,8 +784,10 @@ export interface ProjectItem {
   name: string;
   code: string | null;
   client: string | null;
+
   /** Manager user id (names need a users endpoint — see integration report). */
   managerId: string | null;
+
   method: string;
   status: string;
   priority: string;
@@ -581,23 +798,63 @@ export interface ProjectItem {
   updatedAt: string;
 }
 
-export function normalizeProject(value: unknown): ProjectItem | null {
+export function normalizeProject(
+  value: unknown,
+): ProjectItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    name: toStringOr(value.name, "Untitled project"),
-    code: toNullableString(value.code),
-    client: toNullableString(value.client),
-    managerId: toNullableString(value.manager_id),
-    method: toStringOr(value.method, ""),
-    status: toStringOr(value.status, "pending"),
-    priority: toStringOr(value.priority, "medium"),
-    progress: toNumberOr(value.progress, 0),
-    startDate: toNullableString(value.start_date),
-    endDate: toNullableString(value.end_date),
-    createdAt: toStringOr(value.created_at, ""),
-    updatedAt: toStringOr(value.updated_at, ""),
+    name: toStringOr(
+      value.name,
+      "Untitled project",
+    ),
+    code: toNullableString(
+      value.code,
+    ),
+    client: toNullableString(
+      value.client,
+    ),
+    managerId: toNullableString(
+      value.manager_id,
+    ),
+    method: toStringOr(
+      value.method,
+      "",
+    ),
+    status: toStringOr(
+      value.status,
+      "pending",
+    ),
+    priority: toStringOr(
+      value.priority,
+      "medium",
+    ),
+    progress: toNumberOr(
+      value.progress,
+      0,
+    ),
+    startDate: toNullableString(
+      value.start_date,
+    ),
+    endDate: toNullableString(
+      value.end_date,
+    ),
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
+    updatedAt: toStringOr(
+      value.updated_at,
+      "",
+    ),
   };
 }
 
@@ -618,24 +875,68 @@ export interface RequirementItem {
   updatedAt: string;
 }
 
-export function normalizeRequirement(value: unknown): RequirementItem | null {
+export function normalizeRequirement(
+  value: unknown,
+): RequirementItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    displayId: toStringOr(value.display_id, value.id),
-    projectId: toStringOr(value.project_id, ""),
-    title: toStringOr(value.title, "Untitled requirement"),
-    description: toNullableString(value.description),
-    category: toStringOr(value.category, ""),
-    businessValue: toStringOr(value.business_value, ""),
-    priority: toStringOr(value.priority, "medium"),
-    status: toStringOr(value.status, "draft"),
-    assigneeId: toNullableString(value.assignee_id),
-    sprintId: toNullableString(value.sprint_id),
-    storyPoints: toNullableNumber(value.story_points),
-    createdAt: toStringOr(value.created_at, ""),
-    updatedAt: toStringOr(value.updated_at, ""),
+    displayId: toStringOr(
+      value.display_id,
+      value.id,
+    ),
+    projectId: toStringOr(
+      value.project_id,
+      "",
+    ),
+    title: toStringOr(
+      value.title,
+      "Untitled requirement",
+    ),
+    description: toNullableString(
+      value.description,
+    ),
+    category: toStringOr(
+      value.category,
+      "",
+    ),
+    businessValue: toStringOr(
+      value.business_value,
+      "",
+    ),
+    priority: toStringOr(
+      value.priority,
+      "medium",
+    ),
+    status: toStringOr(
+      value.status,
+      "draft",
+    ),
+    assigneeId: toNullableString(
+      value.assignee_id,
+    ),
+    sprintId: toNullableString(
+      value.sprint_id,
+    ),
+    storyPoints: toNullableNumber(
+      value.story_points,
+    ),
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
+    updatedAt: toStringOr(
+      value.updated_at,
+      "",
+    ),
   };
 }
 
@@ -655,23 +956,66 @@ export interface SprintItem {
   updatedAt: string;
 }
 
-export function normalizeSprint(value: unknown): SprintItem | null {
+export function normalizeSprint(
+  value: unknown,
+): SprintItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    projectId: toStringOr(value.project_id, ""),
-    name: toStringOr(value.name, "Untitled sprint"),
-    goal: toNullableString(value.goal),
-    status: toStringOr(value.status, "planning"),
-    startDate: toNullableString(value.start_date),
-    endDate: toNullableString(value.end_date),
-    totalPoints: toNullableNumber(value.total_points),
-    completedPoints: toNullableNumber(value.completed_points),
-    capacityPoints: toNullableNumber(value.capacity_points ?? value.capacityPoints ?? value.total_points),
-    capacityHours: toNullableNumber(value.capacity_hours ?? value.capacityHours),
-    createdAt: toStringOr(value.created_at, ""),
-    updatedAt: toStringOr(value.updated_at, ""),
+    projectId: toStringOr(
+      value.project_id,
+      "",
+    ),
+    name: toStringOr(
+      value.name,
+      "Untitled sprint",
+    ),
+    goal: toNullableString(
+      value.goal,
+    ),
+    status: toStringOr(
+      value.status,
+      "planning",
+    ),
+    startDate: toNullableString(
+      value.start_date,
+    ),
+    endDate: toNullableString(
+      value.end_date,
+    ),
+    totalPoints: toNullableNumber(
+      value.total_points,
+    ),
+    completedPoints: toNullableNumber(
+      value.completed_points,
+    ),
+    capacityPoints:
+      toNullableNumber(
+        value.capacity_points ??
+          value.capacityPoints ??
+          value.total_points,
+      ),
+    capacityHours:
+      toNullableNumber(
+        value.capacity_hours ??
+          value.capacityHours,
+      ),
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
+    updatedAt: toStringOr(
+      value.updated_at,
+      "",
+    ),
   };
 }
 
@@ -686,8 +1030,10 @@ export interface TaskItem {
   priority: string;
   points: number | null;
   assigneeId: string | null;
+
   /** Backend `column_status` (backlog/todo/inProgress/review/testing/done/blocked). */
   columnStatus: string;
+
   dueDate: string | null;
   progressPercent: number;
   estimatedHours: number | null;
@@ -699,30 +1045,99 @@ export interface TaskItem {
   updatedAt: string;
 }
 
-export function normalizeTask(value: unknown): TaskItem | null {
+export function normalizeTask(
+  value: unknown,
+): TaskItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    displayId: toStringOr(value.display_id, value.id),
-    projectId: toStringOr(value.project_id, ""),
-    sprintId: toNullableString(value.sprint_id),
-    requirementId: toNullableString(value.requirement_id),
-    title: toStringOr(value.title, "Untitled task"),
-    description: toNullableString(value.description),
-    priority: toStringOr(value.priority, "medium"),
-    points: toNullableNumber(value.points),
-    assigneeId: toNullableString(value.assignee_id),
-    columnStatus: toStringOr(value.column_status, toStringOr(value.status, "backlog")),
-    dueDate: toNullableString(value.due_date),
-    progressPercent: toNumberOr(value.progress_percent ?? value.progressPercent, 0),
-    estimatedHours: toNullableNumber(value.estimated_hours ?? value.estimatedHours),
-    actualHours: toNullableNumber(value.actual_hours ?? value.actualHours),
-    isBlocked: value.is_blocked === true || value.isBlocked === true || value.column_status === "blocked",
-    blockedReason: toNullableString(value.blocked_reason ?? value.blockedReason),
-    blockedAt: toNullableString(value.blocked_at ?? value.blockedAt),
-    createdAt: toStringOr(value.created_at, ""),
-    updatedAt: toStringOr(value.updated_at, ""),
+    displayId: toStringOr(
+      value.display_id,
+      value.id,
+    ),
+    projectId: toStringOr(
+      value.project_id,
+      "",
+    ),
+    sprintId: toNullableString(
+      value.sprint_id,
+    ),
+    requirementId:
+      toNullableString(
+        value.requirement_id,
+      ),
+    title: toStringOr(
+      value.title,
+      "Untitled task",
+    ),
+    description: toNullableString(
+      value.description,
+    ),
+    priority: toStringOr(
+      value.priority,
+      "medium",
+    ),
+    points: toNullableNumber(
+      value.points,
+    ),
+    assigneeId: toNullableString(
+      value.assignee_id,
+    ),
+    columnStatus: toStringOr(
+      value.column_status,
+      toStringOr(
+        value.status,
+        "backlog",
+      ),
+    ),
+    dueDate: toNullableString(
+      value.due_date,
+    ),
+    progressPercent: toNumberOr(
+      value.progress_percent ??
+        value.progressPercent,
+      0,
+    ),
+    estimatedHours:
+      toNullableNumber(
+        value.estimated_hours ??
+          value.estimatedHours,
+      ),
+    actualHours:
+      toNullableNumber(
+        value.actual_hours ??
+          value.actualHours,
+      ),
+    isBlocked:
+      value.is_blocked === true ||
+      value.isBlocked === true ||
+      value.column_status === "blocked",
+    blockedReason:
+      toNullableString(
+        value.blocked_reason ??
+          value.blockedReason,
+      ),
+    blockedAt:
+      toNullableString(
+        value.blocked_at ??
+          value.blockedAt,
+      ),
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
+    updatedAt: toStringOr(
+      value.updated_at,
+      "",
+    ),
   };
 }
 
@@ -743,34 +1158,105 @@ export interface BacklogItem {
   id: string;
   projectId: string;
   requirementId: string;
+
+  // Commitment linked to this backlog item.
+  commitmentId: string | null;
+
   rank: number;
   createdAt: string;
   requirement: BacklogRequirement;
 }
 
-export function normalizeBacklogItem(value: unknown): BacklogItem | null {
+export function normalizeBacklogItem(
+  value: unknown,
+): BacklogItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (!isRecord(value.requirements)) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
+  if (!isRecord(value.requirements)) {
+    return null;
+  }
+
   const req = value.requirements;
-  if (typeof req.id !== "string" || req.id.length === 0) return null;
+
+  if (
+    typeof req.id !== "string" ||
+    req.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    projectId: toStringOr(value.project_id, ""),
-    requirementId: toStringOr(value.requirement_id, toStringOr(req.id, "")),
-    rank: toNumberOr(value.rank, 0),
-    createdAt: toStringOr(value.created_at, ""),
+
+    projectId: toStringOr(
+      value.project_id,
+      "",
+    ),
+
+    requirementId: toStringOr(
+      value.requirement_id,
+      toStringOr(req.id, ""),
+    ),
+
+    // NEW: read the commitment linked in the backlog row.
+    commitmentId: toNullableString(
+      value.commitment_id,
+    ),
+
+    rank: toNumberOr(
+      value.rank,
+      0,
+    ),
+
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
+
     requirement: {
       id: req.id,
-      displayId: toStringOr(req.display_id, req.id),
-      title: toStringOr(req.title, "Untitled requirement"),
-      description: toNullableString(req.description),
-      status: toStringOr(req.status, "draft"),
-      priority: toStringOr(req.priority, "medium"),
-      category: toStringOr(req.category, ""),
-      storyPoints: toNullableNumber(req.story_points),
-      assigneeId: toNullableString(req.assignee_id),
-      sprintId: toNullableString(req.sprint_id),
+      displayId: toStringOr(
+        req.display_id,
+        req.id,
+      ),
+      title: toStringOr(
+        req.title,
+        "Untitled requirement",
+      ),
+      description: toNullableString(
+        req.description,
+      ),
+      status: toStringOr(
+        req.status,
+        "draft",
+      ),
+      priority: toStringOr(
+        req.priority,
+        "medium",
+      ),
+      category: toStringOr(
+        req.category,
+        "",
+      ),
+      storyPoints:
+        toNullableNumber(
+          req.story_points,
+        ),
+      assigneeId:
+        toNullableString(
+          req.assignee_id,
+        ),
+      sprintId:
+        toNullableString(
+          req.sprint_id,
+        ),
     },
   };
 }
@@ -786,18 +1272,48 @@ export interface NotificationItem {
   createdAt: string;
 }
 
-export function normalizeNotification(value: unknown): NotificationItem | null {
+export function normalizeNotification(
+  value: unknown,
+): NotificationItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    type: toStringOr(value.type, "system"),
-    title: toStringOr(value.title, "Notification"),
-    description: toStringOr(value.description, ""),
-    priority: toStringOr(value.priority, "low"),
-    read: toBooleanOr(value.read, false),
-    actionLabel: toNullableString(value.action_label),
-    createdAt: toStringOr(value.created_at, ""),
+    type: toStringOr(
+      value.type,
+      "system",
+    ),
+    title: toStringOr(
+      value.title,
+      "Notification",
+    ),
+    description: toStringOr(
+      value.description,
+      "",
+    ),
+    priority: toStringOr(
+      value.priority,
+      "low",
+    ),
+    read: toBooleanOr(
+      value.read,
+      false,
+    ),
+    actionLabel:
+      toNullableString(
+        value.action_label,
+      ),
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
   };
 }
 
@@ -828,32 +1344,92 @@ export function normalizeAiRecommendation(
   value: unknown,
 ): AiRecommendationItem | null {
   if (!isRecord(value)) return null;
-  if (typeof value.id !== "string" || value.id.length === 0) return null;
-  if (!isRecord(value.requirements)) return null;
+
+  if (
+    typeof value.id !== "string" ||
+    value.id.length === 0
+  ) {
+    return null;
+  }
+
+  if (!isRecord(value.requirements)) {
+    return null;
+  }
+
   const req = value.requirements;
-  if (typeof req.id !== "string" || req.id.length === 0) return null;
-  const reasoningRaw: unknown = value.reasoning;
+  const reasoningRaw: unknown =
+    value.reasoning;
+
+  if (
+    typeof req.id !== "string" ||
+    req.id.length === 0
+  ) {
+    return null;
+  }
+
   return {
     id: value.id,
-    requirementId: toStringOr(value.requirement_id, req.id),
-    suggestedPriority: toNullableString(value.suggested_priority),
-    suggestedSprintId: toNullableString(value.suggested_sprint_id),
-    confidenceScore: toNullableNumber(value.confidence_score),
-    summary: toNullableString(value.summary),
-    reasoning: toStringArray(reasoningRaw),
-    recommendationStatus: toStringOr(
-      value.recommendation_status,
-      toStringOr(value.status, "pending"),
+    requirementId: toStringOr(
+      value.requirement_id,
+      req.id,
     ),
-    approvedBy: toNullableString(value.approved_by),
-    approvedAt: toNullableString(value.approved_at),
-    createdAt: toStringOr(value.created_at, ""),
+    suggestedPriority:
+      toNullableString(
+        value.suggested_priority,
+      ),
+    suggestedSprintId:
+      toNullableString(
+        value.suggested_sprint_id,
+      ),
+    confidenceScore:
+      toNullableNumber(
+        value.confidence_score,
+      ),
+    summary: toNullableString(
+      value.summary,
+    ),
+    reasoning:
+      toStringArray(
+        reasoningRaw,
+      ),
+    recommendationStatus:
+      toStringOr(
+        value.recommendation_status,
+        toStringOr(
+          value.status,
+          "pending",
+        ),
+      ),
+    approvedBy:
+      toNullableString(
+        value.approved_by,
+      ),
+    approvedAt:
+      toNullableString(
+        value.approved_at,
+      ),
+    createdAt: toStringOr(
+      value.created_at,
+      "",
+    ),
     requirement: {
       id: req.id,
-      projectId: toStringOr(req.project_id, ""),
-      displayId: toStringOr(req.display_id, req.id),
-      title: toStringOr(req.title, "Untitled requirement"),
-      status: toStringOr(req.status, ""),
+      projectId: toStringOr(
+        req.project_id,
+        "",
+      ),
+      displayId: toStringOr(
+        req.display_id,
+        req.id,
+      ),
+      title: toStringOr(
+        req.title,
+        "Untitled requirement",
+      ),
+      status: toStringOr(
+        req.status,
+        "",
+      ),
     },
   };
 }
@@ -863,21 +1439,31 @@ export function normalizeAiRecommendation(
 // ---------------------------------------------------------------------------
 
 /** Short stable reference for UUID foreign keys shown until names resolve. */
-export function shortId(id: string | null): string {
+export function shortId(
+  id: string | null,
+): string {
   if (!id) return "Unassigned";
-  return id.length > 8 ? `ID ${id.slice(0, 8)}` : `ID ${id}`;
+
+  return id.length > 8
+    ? `ID ${id.slice(0, 8)}`
+    : `ID ${id}`;
 }
 
 /** Stage-based progress estimate — the tasks API exposes no percent-complete. */
-export function taskStageProgress(columnStatus: string): number {
+export function taskStageProgress(
+  columnStatus: string,
+): number {
   switch (columnStatus) {
     case "done":
       return 100;
+
     case "review":
     case "testing":
       return 75;
+
     case "inProgress":
       return 50;
+
     default:
       return 0;
   }
