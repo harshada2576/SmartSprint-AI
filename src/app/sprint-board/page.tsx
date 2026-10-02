@@ -41,8 +41,9 @@ import { formatDate, formatRelativeTime } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
 const SPRINTS_PAGE_SIZE = 50;
-// Bounded board fetch: one page of at most 100 tasks, grouped client-side by
-// column_status. Full server pagination still applies (see footer note).
+// Bounded board fetch: one page of at most 100 tasks from the sprint's
+// project, then filter client-side to the selected sprint. This keeps the board
+// aligned with the same task data source used by Sprint Planning.
 const BOARD_PAGE_SIZE = 100;
 
 const COLUMNS = [
@@ -105,6 +106,14 @@ export default function SprintBoardPage() {
   const [view, setView] = React.useState<"kanban" | "list">("kanban");
   const [sprintIndex, setSprintIndex] = React.useState(0);
 
+  // If Sprint Planning opened this board for a specific sprint, remember that ID.
+  const [requestedSprintId, setRequestedSprintId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const sprintId = new URLSearchParams(window.location.search).get("sprintId");
+    setRequestedSprintId(sprintId);
+  }, []);
+
   const sprintsQuery = React.useMemo(
     () => buildQuery({ page: 1, pageSize: SPRINTS_PAGE_SIZE }),
     [],
@@ -116,6 +125,27 @@ export default function SprintBoardPage() {
     retry: retrySprints,
   } = useCollection<SprintItem>("/api/sprints", normalizeSprint, sprintsQuery);
 
+  React.useEffect(() => {
+    if (sprints.length === 0) return;
+
+    if (requestedSprintId) {
+      const requestedIndex = sprints.findIndex(
+        (sprint) => sprint.id === requestedSprintId,
+      );
+
+      if (requestedIndex >= 0) {
+        setSprintIndex(requestedIndex);
+        return;
+      }
+    }
+
+    // Without a requested sprint, prefer the active sprint; otherwise use the first.
+    const activeIndex = sprints.findIndex((sprint) => sprint.status === "active");
+    if (activeIndex >= 0) {
+      setSprintIndex(activeIndex);
+    }
+  }, [sprints, requestedSprintId]);
+
   const selectedSprint =
     sprints.length === 0
       ? null
@@ -125,7 +155,7 @@ export default function SprintBoardPage() {
     () =>
       selectedSprint
         ? buildQuery({
-            sprintId: selectedSprint.id,
+            projectId: selectedSprint.projectId,
             page: 1,
             pageSize: BOARD_PAGE_SIZE,
           })
@@ -151,11 +181,13 @@ export default function SprintBoardPage() {
   const [moveError, setMoveError] = React.useState<string | null>(null);
 
   const boardTasks = selectedSprint
-    ? tasks.map((task) =>
-        statusOverrides[task.id] !== undefined
-          ? { ...task, columnStatus: statusOverrides[task.id] as string }
-          : task,
-      )
+    ? tasks
+        .filter((task) => task.sprintId === selectedSprint.id)
+        .map((task) =>
+          statusOverrides[task.id] !== undefined
+            ? { ...task, columnStatus: statusOverrides[task.id] as string }
+            : task,
+        )
     : [];
   const countFor = (columnId: string): number =>
     boardTasks.filter((task) => task.columnStatus === columnId).length;

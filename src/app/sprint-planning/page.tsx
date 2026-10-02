@@ -468,7 +468,7 @@ export default function SprintPlanningPage() {
           actions={
             <div className="flex items-center gap-3">
               {selectedSprint?.status === "active" && (
-                <Link href="/sprint-board">
+                <Link href={`/sprint-board?sprintId=${encodeURIComponent(selectedSprintId)}`}>
                   <Button variant="outline" className="flex items-center gap-2">
                     <ExternalLink className="w-4 h-4 text-primary" />
                     Open Sprint Board
