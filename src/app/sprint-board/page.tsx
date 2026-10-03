@@ -189,7 +189,24 @@ export default function SprintBoardPage() {
             : task,
         )
     : [];
-  const countFor = (columnId: string): number =>
+
+  const totalPoints = boardTasks.reduce(
+  (sum, task) => sum + (task.points ?? 0),
+  0,
+);
+
+const completedPoints = boardTasks
+  .filter((task) => task.columnStatus === "done")
+  .reduce((sum, task) => sum + (task.points ?? 0), 0);
+
+const remainingPoints = totalPoints - completedPoints;
+
+const boardProgress =
+  totalPoints > 0
+    ? Math.round((completedPoints / totalPoints) * 100)
+    : 0;
+
+    const countFor = (columnId: string): number =>
     boardTasks.filter((task) => task.columnStatus === columnId).length;
 
   // Drop overrides the backend has confirmed so the server stays the source
@@ -400,13 +417,13 @@ export default function SprintBoardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Progress</p>
-                <p className="text-xl font-bold text-slate-900">{sprintProgress(selectedSprint)}%</p>
+                <p className="text-xl font-bold text-slate-900">{boardProgress}%</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
                 <Target className="h-5 w-5 text-blue-600" />
               </div>
             </div>
-            <Progress value={sprintProgress(selectedSprint)} size="sm" className="mt-3" />
+            <Progress value={boardProgress} size="sm" className="mt-3" />
           </CardContent>
         </Card>
         <Card>
@@ -414,7 +431,7 @@ export default function SprintBoardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Total Points</p>
-                <p className="text-xl font-bold text-slate-900">{selectedSprint.totalPoints ?? "—"}</p>
+                <p className="text-xl font-bold text-slate-900">{totalPoints}</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-violet-50 flex items-center justify-center">
                 <Flag className="h-5 w-5 text-violet-600" />
@@ -427,7 +444,7 @@ export default function SprintBoardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Completed</p>
-                <p className="text-xl font-bold text-emerald-600">{selectedSprint.completedPoints ?? "—"}</p>
+                <p className="text-xl font-bold text-emerald-600">{completedPoints}</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center">
                 <Play className="h-5 w-5 text-emerald-600" />
@@ -441,9 +458,7 @@ export default function SprintBoardPage() {
               <div>
                 <p className="text-sm text-slate-500">Remaining</p>
                 <p className="text-xl font-bold text-slate-900">
-                  {selectedSprint.totalPoints !== null && selectedSprint.completedPoints !== null
-                    ? selectedSprint.totalPoints - selectedSprint.completedPoints
-                    : "—"}
+                  {remainingPoints}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-amber-50 flex items-center justify-center">
