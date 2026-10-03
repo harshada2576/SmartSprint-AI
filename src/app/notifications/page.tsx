@@ -1,9 +1,15 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { AuthenticatedLayout } from "@/components/layout/AuthenticatedLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -33,7 +39,14 @@ import { formatRelativeTime } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 
-type TabValue = "all" | "unread" | "task" | "sprint" | "approval" | "document" | "system";
+type TabValue =
+  | "all"
+  | "unread"
+  | "task"
+  | "sprint"
+  | "approval"
+  | "document"
+  | "system";
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -67,8 +80,6 @@ const getPriorityColor = (priority: string) => {
   }
 };
 
-// Default action labels per notification type (UI copy; the API may supply
-// its own `action_label` per row, which takes precedence).
 const DEFAULT_ACTION_BY_TYPE: Record<string, string> = {
   task: "View Task",
   sprint: "Open Sprint",
@@ -80,58 +91,126 @@ const DEFAULT_ACTION_BY_TYPE: Record<string, string> = {
 
 function formatTime(value: string): string {
   if (!value) return "";
+
   const time = new Date(value).getTime();
-  if (Number.isNaN(time)) return value;
+
+  if (Number.isNaN(time)) {
+    return value;
+  }
+
   return formatRelativeTime(value);
 }
 
+type NotificationWithAction = NotificationItem & {
+  actionUrl?: string | null;
+  action_url?: string | null;
+  taskId?: string | null;
+  task_id?: string | null;
+  sprintId?: string | null;
+  sprint_id?: string | null;
+  entityId?: string | null;
+  entity_id?: string | null;
+};
+
 export default function NotificationsPage() {
-  const [activeTab, setActiveTab] = React.useState<TabValue>("all");
+  const router = useRouter();
+
+  const [activeTab, setActiveTab] =
+    React.useState<TabValue>("all");
+
   const [page, setPage] = React.useState(1);
-  // Local read-state overrides applied optimistically after PATCH succeeds.
-  const [readOverrides, setReadOverrides] = React.useState<Record<string, boolean>>({});
-  const [mutationError, setMutationError] = React.useState<string | null>(null);
-  const [isMarkingAll, setIsMarkingAll] = React.useState(false);
+
+  const [readOverrides, setReadOverrides] =
+    React.useState<Record<string, boolean>>({});
+
+  const [mutationError, setMutationError] =
+    React.useState<string | null>(null);
+
+  const [isMarkingAll, setIsMarkingAll] =
+    React.useState(false);
 
   const query = React.useMemo(() => {
-    if (activeTab === "all") return buildQuery({ page, pageSize: PAGE_SIZE });
-    if (activeTab === "unread")
-      return buildQuery({ read: "unread", page, pageSize: PAGE_SIZE });
-    return buildQuery({ type: activeTab, page, pageSize: PAGE_SIZE });
+    if (activeTab === "all") {
+      return buildQuery({
+        page,
+        pageSize: PAGE_SIZE,
+      });
+    }
+
+    if (activeTab === "unread") {
+      return buildQuery({
+        read: "unread",
+        page,
+        pageSize: PAGE_SIZE,
+      });
+    }
+
+    return buildQuery({
+      type: activeTab,
+      page,
+      pageSize: PAGE_SIZE,
+    });
   }, [activeTab, page]);
 
-  const { items, pagination, meta, error, isLoading, retry } =
-    useCollection<NotificationItem>("/api/notifications", normalizeNotification, query);
+  const {
+    items,
+    pagination,
+    meta,
+    error,
+    isLoading,
+    retry,
+  } = useCollection<NotificationItem>(
+    "/api/notifications",
+    normalizeNotification,
+    query,
+  );
 
-  // Unfiltered total for the "All" badge (cheap pageSize=1 probe).
   const totalsQuery = React.useMemo(
-    () => buildQuery({ page: 1, pageSize: 1 }),
+    () =>
+      buildQuery({
+        page: 1,
+        pageSize: 1,
+      }),
     [],
   );
-  const { pagination: totalsPagination, retry: retryTotals } =
-    useCollection<NotificationItem>(
-      "/api/notifications",
-      normalizeNotification,
-      totalsQuery,
-    );
+
+  const {
+    pagination: totalsPagination,
+    retry: retryTotals,
+  } = useCollection<NotificationItem>(
+    "/api/notifications",
+    normalizeNotification,
+    totalsQuery,
+  );
 
   const displayed = items.map((item) => ({
     ...item,
     read: readOverrides[item.id] ?? item.read,
   }));
 
-  // Server-reported global unread count, adjusted for optimistic overrides.
   const metaUnread =
-    typeof meta.unreadCount === "number" ? meta.unreadCount : null;
+    typeof meta.unreadCount === "number"
+      ? meta.unreadCount
+      : null;
+
   const optimisticNewlyRead = items.filter(
-    (item) => !item.read && readOverrides[item.id] === true,
+    (item) =>
+      !item.read &&
+      readOverrides[item.id] === true,
   ).length;
+
   const unreadCount =
     metaUnread !== null
-      ? Math.max(metaUnread - optimisticNewlyRead, 0)
-      : displayed.filter((item) => !item.read).length;
+      ? Math.max(
+          metaUnread - optimisticNewlyRead,
+          0,
+        )
+      : displayed.filter(
+          (item) => !item.read,
+        ).length;
 
-  const showLoading = isLoading && items.length === 0;
+  const showLoading =
+    isLoading && items.length === 0;
 
   const selectTab = (tab: TabValue) => {
     setActiveTab(tab);
@@ -139,60 +218,109 @@ export default function NotificationsPage() {
     setMutationError(null);
   };
 
-  const markOneRead = React.useCallback(async (id: string) => {
-    setMutationError(null);
-    setReadOverrides((current) => ({ ...current, [id]: true }));
-    try {
-      await patchJson("/api/notifications", { id, read: true }, normalizeNotification, {
-        fallback: "Could not mark the notification as read",
-      });
-      retryTotals();
-    } catch (mutationFailure: unknown) {
-      setReadOverrides((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      setMutationError(
-        mutationFailure instanceof ApiError
-          ? mutationFailure.message
-          : "Could not mark the notification as read.",
-      );
-    }
-  }, [retryTotals]);
+  const markOneRead = React.useCallback(
+    async (id: string) => {
+      setMutationError(null);
 
-  const markVisibleRead = React.useCallback(async () => {
-    const unread = displayed.filter((item) => !item.read);
-    if (unread.length === 0) return;
-    setMutationError(null);
-    for (const item of unread) {
+      setReadOverrides((current) => ({
+        ...current,
+        [id]: true,
+      }));
+
       try {
         await patchJson(
           "/api/notifications",
-          { id: item.id, read: true },
+          {
+            id,
+            read: true,
+          },
           normalizeNotification,
-          { fallback: "Could not mark notifications as read" },
+          {
+            fallback:
+              "Could not mark the notification as read",
+          },
         );
-        setReadOverrides((current) => ({ ...current, [item.id]: true }));
+
+        retryTotals();
       } catch (mutationFailure: unknown) {
+        setReadOverrides((current) => {
+          const next = { ...current };
+          delete next[id];
+          return next;
+        });
+
         setMutationError(
           mutationFailure instanceof ApiError
             ? mutationFailure.message
-            : "Could not mark notifications as read.",
+            : "Could not mark the notification as read.",
         );
-        break;
       }
-    }
-    retryTotals();
-  }, [displayed, retryTotals]);
+    },
+    [retryTotals],
+  );
+
+  const markVisibleRead =
+    React.useCallback(async () => {
+      const unread = displayed.filter(
+        (item) => !item.read,
+      );
+
+      if (unread.length === 0) {
+        return;
+      }
+
+      setMutationError(null);
+
+      for (const item of unread) {
+        try {
+          await patchJson(
+            "/api/notifications",
+            {
+              id: item.id,
+              read: true,
+            },
+            normalizeNotification,
+            {
+              fallback:
+                "Could not mark notifications as read",
+            },
+          );
+
+          setReadOverrides((current) => ({
+            ...current,
+            [item.id]: true,
+          }));
+        } catch (mutationFailure: unknown) {
+          setMutationError(
+            mutationFailure instanceof ApiError
+              ? mutationFailure.message
+              : "Could not mark notifications as read.",
+          );
+
+          break;
+        }
+      }
+
+      retryTotals();
+    }, [displayed, retryTotals]);
 
   const markAllRead = React.useCallback(async () => {
     setMutationError(null);
     setIsMarkingAll(true);
+
     try {
-      await patchJson("/api/notifications", { markAllRead: true }, normalizeNotification, {
-        fallback: "Could not mark all notifications as read",
-      });
+      await patchJson(
+        "/api/notifications",
+        {
+          markAllRead: true,
+        },
+        normalizeNotification,
+        {
+          fallback:
+            "Could not mark all notifications as read",
+        },
+      );
+
       setReadOverrides({});
       retry();
       retryTotals();
@@ -207,7 +335,93 @@ export default function NotificationsPage() {
     }
   }, [retry, retryTotals]);
 
-  const sidebarButton = (tab: TabValue, label: React.ReactNode, badge?: React.ReactNode) => (
+  const handleNotificationAction = React.useCallback(
+    async (notification: NotificationItem) => {
+      const item =
+        notification as NotificationWithAction;
+
+      await markOneRead(notification.id);
+
+      const actionUrl =
+        item.actionUrl ??
+        item.action_url;
+
+      if (actionUrl) {
+        router.push(actionUrl);
+        return;
+      }
+
+      if (
+        notification.type === "task"
+      ) {
+        const taskId =
+          item.taskId ??
+          item.task_id ??
+          item.entityId ??
+          item.entity_id;
+
+        if (taskId) {
+          router.push(`/tasks/${taskId}`);
+          return;
+        }
+
+        // Current notification records do not contain a task ID.
+        // Fall back to the Tasks page so the button still navigates.
+        router.push("/tasks");
+        return;
+      }
+
+      if (
+        notification.type === "sprint"
+      ) {
+        const sprintId =
+          item.sprintId ??
+          item.sprint_id ??
+          item.entityId ??
+          item.entity_id;
+
+        if (sprintId) {
+          router.push(
+            `/sprint-board?sprintId=${sprintId}`,
+          );
+          return;
+        }
+
+        router.push("/sprint-board");
+        return;
+      }
+
+      if (item.entityId ?? item.entity_id) {
+        const entityId =
+          item.entityId ??
+          item.entity_id;
+
+        switch (notification.type) {
+          case "approval":
+            router.push(
+              `/approvals/${entityId}`,
+            );
+            return;
+
+          case "document":
+            router.push(
+              `/documents/${entityId}`,
+            );
+            return;
+
+          default:
+            break;
+        }
+      }
+    },
+    [markOneRead, router],
+  );
+
+  const sidebarButton = (
+    tab: TabValue,
+    label: React.ReactNode,
+    badge?: React.ReactNode,
+  ) => (
     <button
       onClick={() => selectTab(tab)}
       className={`w-full flex items-center justify-between px-4 py-3 text-left text-sm transition-colors ${
@@ -216,7 +430,10 @@ export default function NotificationsPage() {
           : "text-slate-600 hover:bg-slate-50"
       }`}
     >
-      <span className="flex items-center gap-3">{label}</span>
+      <span className="flex items-center gap-3">
+        {label}
+      </span>
+
       {badge}
     </button>
   );
@@ -227,11 +444,18 @@ export default function NotificationsPage() {
         title="Notification Center"
         description="Stay updated on all project activities"
         breadcrumb={[
-          { label: "Dashboard", href: "/dashboard" },
-          { label: "Notifications" },
+          {
+            label: "Dashboard",
+            href: "/dashboard",
+          },
+          {
+            label: "Notifications",
+          },
         ]}
         primaryAction={{
-          label: isMarkingAll ? "Marking…" : "Mark All Read",
+          label: isMarkingAll
+            ? "Marking…"
+            : "Mark All Read",
           onClick: () => {
             void markAllRead();
           },
@@ -239,12 +463,14 @@ export default function NotificationsPage() {
       />
 
       <div className="grid lg:grid-cols-4 gap-6">
-        {/* Sidebar Filters */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Filters</CardTitle>
+              <CardTitle className="text-base">
+                Filters
+              </CardTitle>
             </CardHeader>
+
             <CardContent className="p-0">
               <div className="divide-y divide-slate-100">
                 {sidebarButton(
@@ -253,8 +479,11 @@ export default function NotificationsPage() {
                     <Bell className="h-4 w-4" />
                     All Notifications
                   </>,
-                  <Badge size="sm">{totalsPagination.total}</Badge>,
+                  <Badge size="sm">
+                    {totalsPagination.total}
+                  </Badge>,
                 )}
+
                 {sidebarButton(
                   "unread",
                   <>
@@ -262,11 +491,15 @@ export default function NotificationsPage() {
                     Unread
                   </>,
                   unreadCount > 0 ? (
-                    <Badge variant="danger" size="sm">
+                    <Badge
+                      variant="danger"
+                      size="sm"
+                    >
                       {unreadCount}
                     </Badge>
                   ) : undefined,
                 )}
+
                 {sidebarButton(
                   "task",
                   <>
@@ -274,6 +507,7 @@ export default function NotificationsPage() {
                     Tasks
                   </>,
                 )}
+
                 {sidebarButton(
                   "sprint",
                   <>
@@ -281,6 +515,7 @@ export default function NotificationsPage() {
                     Sprints
                   </>,
                 )}
+
                 {sidebarButton(
                   "approval",
                   <>
@@ -288,6 +523,7 @@ export default function NotificationsPage() {
                     Approvals
                   </>,
                 )}
+
                 {sidebarButton(
                   "document",
                   <>
@@ -295,6 +531,7 @@ export default function NotificationsPage() {
                     Documents
                   </>,
                 )}
+
                 {sidebarButton(
                   "system",
                   <>
@@ -307,7 +544,6 @@ export default function NotificationsPage() {
           </Card>
         </div>
 
-        {/* Main Content */}
         <div className="lg:col-span-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -316,57 +552,77 @@ export default function NotificationsPage() {
                   ? "All Notifications"
                   : activeTab === "unread"
                   ? "Unread Notifications"
-                  : `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Notifications`}
+                  : `${
+                      activeTab
+                        .charAt(0)
+                        .toUpperCase() +
+                      activeTab.slice(1)
+                    } Notifications`}
               </CardTitle>
+
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
-                  leftIcon={<Check className="h-4 w-4" />}
+                  leftIcon={
+                    <Check className="h-4 w-4" />
+                  }
                   onClick={() => {
                     void markVisibleRead();
                   }}
                 >
                   Mark Read
                 </Button>
-                {/* Clear (delete) is intentionally unwired: no DELETE
-                    /api/notifications endpoint exists, so deletion must not
-                    be faked. Kept visually consistent; see integration report. */}
+
                 <Button
                   variant="ghost"
                   size="sm"
-                  leftIcon={<Trash2 className="h-4 w-4" />}
+                  leftIcon={
+                    <Trash2 className="h-4 w-4" />
+                  }
                   title="Delete is unavailable: no DELETE /api/notifications endpoint exists"
                 >
                   Clear
                 </Button>
               </div>
             </CardHeader>
+
             <CardContent className="p-0">
               {mutationError !== null ? (
                 <p className="px-4 py-3 text-sm text-rose-700 bg-rose-50 border-y border-rose-100">
                   {mutationError}
                 </p>
               ) : null}
+
               {showLoading ? (
                 <div className="p-4 space-y-3">
-                  {[0, 1, 2, 3, 4].map((index) => (
-                    <div key={index} className="flex items-start gap-4">
-                      <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
-                      <div className="flex-1 space-y-2">
-                        <Skeleton className="h-4 w-3/4" />
-                        <Skeleton className="h-3 w-1/2" />
+                  {[0, 1, 2, 3, 4].map(
+                    (index) => (
+                      <div
+                        key={index}
+                        className="flex items-start gap-4"
+                      >
+                        <Skeleton className="h-10 w-10 rounded-full flex-shrink-0" />
+
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ),
+                  )}
                 </div>
-              ) : error !== null && items.length === 0 ? (
+              ) : error !== null &&
+                items.length === 0 ? (
                 <div className="p-6">
                   <EmptyState
                     icon={Bell}
                     title="Couldn't load notifications"
                     description={error.message}
-                    action={{ label: "Try again", onClick: retry }}
+                    action={{
+                      label: "Try again",
+                      onClick: retry,
+                    }}
                   />
                 </div>
               ) : displayed.length === 0 ? (
@@ -382,84 +638,130 @@ export default function NotificationsPage() {
                   />
                 </div>
               ) : (
-              <div className="divide-y divide-slate-100">
-                {displayed.map((notification) => (
-                  <div
-                    key={notification.id}
-                    className={`flex items-start gap-4 p-4 hover:bg-slate-50 transition-colors ${
-                      !notification.read ? "bg-blue-50/30" : ""
-                    }`}
-                  >
-                    <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      {getIcon(notification.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-medium text-slate-900">
-                            {notification.title}
-                          </p>
-                          {notification.description ? (
-                            <p className="text-sm text-slate-600 mt-0.5">
-                              {notification.description}
-                            </p>
-                          ) : null}
-                          <div className="flex items-center gap-3 mt-2">
-                            <span className="text-xs text-slate-400">
-                              {formatTime(notification.createdAt)}
-                            </span>
-                            <Badge
-                              className={getPriorityColor(notification.priority)}
+                <div className="divide-y divide-slate-100">
+                  {displayed.map(
+                    (notification) => (
+                      <div
+                        key={notification.id}
+                        className={`flex items-start gap-4 p-4 hover:bg-slate-50 transition-colors ${
+                          !notification.read
+                            ? "bg-blue-50/30"
+                            : ""
+                        }`}
+                      >
+                        <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                          {getIcon(
+                            notification.type,
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                {notification.title}
+                              </p>
+
+                              {notification.description ? (
+                                <p className="text-sm text-slate-600 mt-0.5">
+                                  {
+                                    notification.description
+                                  }
+                                </p>
+                              ) : null}
+
+                              <div className="flex items-center gap-3 mt-2">
+                                <span className="text-xs text-slate-400">
+                                  {formatTime(
+                                    notification.createdAt,
+                                  )}
+                                </span>
+
+                                <Badge
+                                  className={getPriorityColor(
+                                    notification.priority,
+                                  )}
+                                  size="sm"
+                                >
+                                  {
+                                    notification.priority
+                                  }
+                                </Badge>
+                              </div>
+                            </div>
+
+                            <Button
+                              variant="secondary"
                               size="sm"
+                              onClick={() => {
+                                void handleNotificationAction(
+                                  notification,
+                                );
+                              }}
                             >
-                              {notification.priority}
-                            </Badge>
+                              {notification.actionLabel ??
+                                DEFAULT_ACTION_BY_TYPE[
+                                  notification.type
+                                ] ??
+                                "View"}
+                            </Button>
                           </div>
                         </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            void markOneRead(notification.id);
-                          }}
-                        >
-                          {notification.actionLabel ??
-                            DEFAULT_ACTION_BY_TYPE[notification.type] ??
-                            "View"}
-                        </Button>
+
+                        {!notification.read && (
+                          <div className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-2" />
+                        )}
                       </div>
-                    </div>
-                    {!notification.read && (
-                      <div className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-2" />
-                    )}
-                  </div>
-                ))}
-              </div>
+                    ),
+                  )}
+                </div>
               )}
             </CardContent>
           </Card>
 
-          {!showLoading && error === null && pagination.total > 0 ? (
+          {!showLoading &&
+          error === null &&
+          pagination.total > 0 ? (
             <div className="flex items-center justify-between mt-4">
               <p className="text-sm text-slate-500">
-                Page {pagination.page} of {Math.max(pagination.totalPages, 1)} ·{" "}
-                {pagination.total} notification{pagination.total === 1 ? "" : "s"}
+                Page {pagination.page} of{" "}
+                {Math.max(
+                  pagination.totalPages,
+                  1,
+                )}{" "}
+                · {pagination.total} notification
+                {pagination.total === 1
+                  ? ""
+                  : "s"}
               </p>
+
               <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setPage((current) => Math.max(current - 1, 1))}
-                >
-                  Previous
-                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={() =>
                     setPage((current) =>
-                      pagination.totalPages > 0
-                        ? Math.min(current + 1, pagination.totalPages)
+                      Math.max(
+                        current - 1,
+                        1,
+                      ),
+                    )
+                  }
+                >
+                  Previous
+                </Button>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    setPage((current) =>
+                      pagination.totalPages >
+                      0
+                        ? Math.min(
+                            current + 1,
+                            pagination.totalPages,
+                          )
                         : current + 1,
                     )
                   }
