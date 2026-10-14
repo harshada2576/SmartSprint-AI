@@ -60,7 +60,11 @@ export default function DashboardPage() {
   }, []);
 
   React.useEffect(() => {
-    fetchStats();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await fetchStats();
+    })();
   }, [fetchStats]);
 
   if (userLoading || loading) {

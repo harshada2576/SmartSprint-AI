@@ -57,7 +57,17 @@ function typeLabel(type: Commitment["commitment_type"]) {
 }
 
 export default function CommitmentsPage() {
-  const [projectId, setProjectId] = React.useState("");
+  // Read projectId from the URL once via lazy initialization (no mount
+  // effect + extra render).
+  //
+  // Example:
+  // /commitments?projectId=abc-123
+  const [projectId, setProjectId] = React.useState(
+    () =>
+      (typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("projectId")) ?? "",
+  );
   const [commitments, setCommitments] = React.useState<Commitment[]>(
     [],
   );
@@ -77,19 +87,9 @@ export default function CommitmentsPage() {
   const [progress, setProgress] = React.useState(0);
 
   /*
-   * Read projectId from the URL.
-   *
-   * Example:
-   * /commitments?projectId=abc-123
+   * projectId is initialized from the URL above, so no mount effect is
+   * needed here.
    */
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlProjectId = params.get("projectId");
-
-    if (urlProjectId) {
-      setProjectId(urlProjectId);
-    }
-  }, []);
 
   /*
    * Load commitments.
@@ -143,7 +143,11 @@ export default function CommitmentsPage() {
   React.useEffect(() => {
     if (!projectId.trim()) return;
 
-    loadCommitments();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await loadCommitments();
+    })();
 
     // loadCommitments intentionally runs when projectId changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps

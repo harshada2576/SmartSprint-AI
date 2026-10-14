@@ -88,7 +88,11 @@ export default function TeamPage() {
   }, []);
 
   React.useEffect(() => {
-    fetchTeam();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await fetchTeam();
+    })();
   }, [fetchTeam]);
 
   const handleSendInvite = async (e: React.FormEvent) => {

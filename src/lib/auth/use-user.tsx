@@ -70,7 +70,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
-    fetchMe();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await fetchMe();
+    })();
   }, [fetchMe]);
 
   const role = data?.primaryOrganization?.role ?? null;

@@ -15,8 +15,11 @@ function InviteContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
 
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(!!token);
+  const [error, setError] = React.useState<string | null>(
+    // Known at render time: no mount effect + extra render needed.
+    token ? null : "No invitation token provided.",
+  );
   const [invite, setInvite] = React.useState<{
     id: string;
     email: string;
@@ -31,9 +34,9 @@ function InviteContent() {
   const [success, setSuccess] = React.useState(false);
 
   React.useEffect(() => {
+    // Without a token there is nothing to verify (initial state above
+    // already reflects this).
     if (!token) {
-      setError("No invitation token provided.");
-      setLoading(false);
       return;
     }
 

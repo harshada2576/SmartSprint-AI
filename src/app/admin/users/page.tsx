@@ -66,7 +66,11 @@ export default function AdminUsersPage() {
   }, []);
 
   React.useEffect(() => {
-    fetchData();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   const handleSendInvite = async (e: React.FormEvent) => {

@@ -163,7 +163,11 @@ export default function MonitoringPage() {
 
   React.useEffect(() => {
     if (selectedProjectId) {
-      fetchMonitoring(selectedProjectId);
+      // Async boundary: state updates land in the fetch continuation, not
+      // synchronously in the effect body.
+      void (async () => {
+        await fetchMonitoring(selectedProjectId);
+      })();
     }
   }, [selectedProjectId, fetchMonitoring]);
 

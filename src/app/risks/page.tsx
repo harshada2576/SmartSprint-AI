@@ -132,7 +132,11 @@ export default function RisksPage() {
   }, [selectedProjectId]);
 
   React.useEffect(() => {
-    fetchRisks();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await fetchRisks();
+    })();
   }, [fetchRisks]);
 
   const handleRunAnalysis = async () => {

@@ -147,7 +147,11 @@ export default function ReportsPage() {
   }, [reportType, selectedProjectId, selectedSprintId]);
 
   React.useEffect(() => {
-    fetchReport();
+    // Async boundary: state updates land in the fetch continuation, not
+    // synchronously in the effect body.
+    void (async () => {
+      await fetchReport();
+    })();
   }, [fetchReport]);
 
   const handleExportCsv = () => {

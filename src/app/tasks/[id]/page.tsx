@@ -158,8 +158,12 @@ export default function TaskDetailPage() {
   }, [taskId, idValid]);
 
   React.useEffect(() => {
-    fetchTask();
-    fetchComments();
+    // Async boundary: state updates land in the fetch continuations, not
+    // synchronously in the effect body.
+    void (async () => {
+      // Concurrent, as before: both requests start together.
+      await Promise.all([fetchTask(), fetchComments()]);
+    })();
   }, [fetchTask, fetchComments]);
 
   const handleQuickStatus = async (newStatus: string) => {

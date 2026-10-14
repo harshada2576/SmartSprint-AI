@@ -60,6 +60,14 @@ export default function AiAssistantPage() {
   const [inputQuery, setInputQuery] = React.useState("");
   const [isSending, setIsSending] = React.useState(false);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+  // Monotonic message-key counter. Refs are the correct place for values
+  // mutated in event handlers; unlike Date.now() this is deterministic
+  // and keeps render output pure.
+  const messageIdCounter = React.useRef(0);
+  const nextMessageId = (prefix: string): string => {
+    messageIdCounter.current += 1;
+    return `${prefix}-${messageIdCounter.current}`;
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -74,7 +82,7 @@ export default function AiAssistantPage() {
     if (!text || isSending) return;
 
     const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
+      id: nextMessageId("user"),
       sender: "user",
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -98,7 +106,7 @@ export default function AiAssistantPage() {
       const answer = json?.data?.answer || "I processed your request, but could not produce a response.";
 
       const aiMsg: ChatMessage = {
-        id: `ai-${Date.now()}`,
+        id: nextMessageId("ai"),
         sender: "assistant",
         text: answer,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -107,7 +115,7 @@ export default function AiAssistantPage() {
       setMessages((prev) => [...prev, aiMsg]);
     } catch {
       const errorMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
+        id: nextMessageId("err"),
         sender: "assistant",
         text: "⚠️ AI assistance is temporarily unavailable. Your project data is safe. Please check your connection and try again.",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),

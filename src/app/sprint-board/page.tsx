@@ -107,12 +107,13 @@ export default function SprintBoardPage() {
   const [sprintIndex, setSprintIndex] = React.useState(0);
 
   // If Sprint Planning opened this board for a specific sprint, remember that ID.
-  const [requestedSprintId, setRequestedSprintId] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    const sprintId = new URLSearchParams(window.location.search).get("sprintId");
-    setRequestedSprintId(sprintId);
-  }, []);
+  // Read once via lazy initialization (no mount effect + extra render).
+  const [requestedSprintId] = React.useState<string | null>(
+    () =>
+      typeof window === "undefined"
+        ? null
+        : new URLSearchParams(window.location.search).get("sprintId"),
+  );
 
   const sprintsQuery = React.useMemo(
     () => buildQuery({ page: 1, pageSize: SPRINTS_PAGE_SIZE }),
