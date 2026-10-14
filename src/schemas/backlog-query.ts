@@ -18,15 +18,22 @@ export const BACKLOG_STATUSES = [
   "blocked",
 ] as const;
 
-export type BacklogStatusFilter = (typeof BACKLOG_STATUSES)[number];
+export type BacklogStatusFilter =
+  (typeof BACKLOG_STATUSES)[number];
 
 /** Requirement priorities filterable on the backlog (joined requirement). */
-export const BACKLOG_PRIORITIES = ["high", "medium", "low"] as const;
+export const BACKLOG_PRIORITIES = [
+  "high",
+  "medium",
+  "low",
+] as const;
 
-export type BacklogPriorityFilter = (typeof BACKLOG_PRIORITIES)[number];
+export type BacklogPriorityFilter =
+  (typeof BACKLOG_PRIORITIES)[number];
 
 export interface BacklogQueryFilters {
   projectId?: string;
+  commitmentId?: string;
   status?: BacklogStatusFilter;
   priority?: BacklogPriorityFilter;
   search?: string;
@@ -37,11 +44,14 @@ export type BacklogQueryResult =
   | { response: NextResponse };
 
 /**
- * Validates `GET /api/backlog` query parameters. Accepts `projectId`
- * (or legacy `project_id`); `status` / `priority` apply to the joined
- * requirement; `search` matches requirement title / display ID /
- * description. Unknown parameters are ignored. Never accepts organization
- * IDs, user IDs, roles, or membership claims.
+ * Validates GET /api/backlog query parameters.
+ *
+ * Supported filters:
+ * - projectId
+ * - commitmentId
+ * - status
+ * - priority
+ * - search
  */
 export function validateBacklogQuery(
   searchParams: URLSearchParams,
@@ -49,47 +59,89 @@ export function validateBacklogQuery(
   const details: ApiErrorDetail[] = [];
   const filters: BacklogQueryFilters = {};
 
-  const projectId = getQueryParam(searchParams, "projectId", "project_id");
+  const projectId = getQueryParam(
+    searchParams,
+    "projectId",
+    "project_id",
+  );
+
   if (projectId !== null) {
     if (!isUuid(projectId)) {
       details.push({
         field: "projectId",
-        message: 'Query parameter "projectId" must be a valid UUID',
+        message:
+          'Query parameter "projectId" must be a valid UUID',
       });
     } else {
       filters.projectId = projectId;
     }
   }
 
-  const status = getQueryParam(searchParams, "status");
+  const commitmentId = getQueryParam(
+    searchParams,
+    "commitmentId",
+    "commitment_id",
+  );
+
+  if (commitmentId !== null) {
+    if (!isUuid(commitmentId)) {
+      details.push({
+        field: "commitmentId",
+        message:
+          'Query parameter "commitmentId" must be a valid UUID',
+      });
+    } else {
+      filters.commitmentId = commitmentId;
+    }
+  }
+
+  const status = getQueryParam(
+    searchParams,
+    "status",
+  );
+
   if (status !== null) {
     if (
-      !(BACKLOG_STATUSES as readonly string[]).includes(status)
+      !(BACKLOG_STATUSES as readonly string[]).includes(
+        status,
+      )
     ) {
       details.push({
         field: "status",
         message: `Query parameter "status" must be one of: ${BACKLOG_STATUSES.join(", ")}`,
       });
     } else {
-      filters.status = status as BacklogStatusFilter;
+      filters.status =
+        status as BacklogStatusFilter;
     }
   }
 
-  const priority = getQueryParam(searchParams, "priority");
+  const priority = getQueryParam(
+    searchParams,
+    "priority",
+  );
+
   if (priority !== null) {
     if (
-      !(BACKLOG_PRIORITIES as readonly string[]).includes(priority)
+      !(
+        BACKLOG_PRIORITIES as readonly string[]
+      ).includes(priority)
     ) {
       details.push({
         field: "priority",
         message: `Query parameter "priority" must be one of: ${BACKLOG_PRIORITIES.join(", ")}`,
       });
     } else {
-      filters.priority = priority as BacklogPriorityFilter;
+      filters.priority =
+        priority as BacklogPriorityFilter;
     }
   }
 
-  const search = getQueryParam(searchParams, "search");
+  const search = getQueryParam(
+    searchParams,
+    "search",
+  );
+
   if (search !== null) {
     if (search.length > MAX_SEARCH_LENGTH) {
       details.push({
@@ -102,7 +154,10 @@ export function validateBacklogQuery(
   }
 
   if (details.length > 0) {
-    return { response: validationErrorResponse(details) };
+    return {
+      response: validationErrorResponse(details),
+    };
   }
+
   return { filters };
 }

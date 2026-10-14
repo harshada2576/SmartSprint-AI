@@ -58,6 +58,10 @@ psql "$DATABASE_URL" -f supabase/migrations/0003_mvp_task_comments_risks_sprints
 psql "$DATABASE_URL" -f supabase/migrations/0004_rbac_expansion.sql
 psql "$DATABASE_URL" -f supabase/migrations/0005_rbac_rls_rewrite.sql
 psql "$DATABASE_URL" -f supabase/migrations/0006_hr_member_removal.sql
+psql "$DATABASE_URL" -f supabase/migrations/0007_commitments.sql
+psql "$DATABASE_URL" -f supabase/migrations/0008_backlog_commitments.sql
+psql "$DATABASE_URL" -f supabase/migrations/0009_approval_decision_reason.sql
+psql "$DATABASE_URL" -f supabase/migrations/0010_notification_entity_links.sql
 ```
 
 > `ALTER TYPE user_role ADD VALUE` cannot run inside a transaction block on
@@ -78,6 +82,15 @@ Key migration contents:
   non-staff field boundary, budget-editor (ADMIN/PM/FINANCE) policies,
   Storage object authorization mirroring metadata.
 - `0006_hr_member_removal` — HR member removal (no self-removal).
+- `0007_commitments` — `commitments` table (outcome/deliverable/milestone/
+  obligation tracking) with staff/member/admin RLS policies.
+- `0008_backlog_commitments` — `backlog.commitment_id` (nullable, SET NULL)
+  linking backlog items to commitments.
+- `0009_approval_decision_reason` — additive nullable
+  `approvals.decided_reason` for the reviewer rationale.
+- `0010_notification_entity_links` — additive nullable
+  `entity_type`/`entity_id`/`action_url` on `notifications` so inbox
+  actions navigate to the real entity.
 
 ### Local development
 
@@ -93,7 +106,7 @@ See [docs/deployment/](docs/deployment/) for environments, Supabase setup,
 Storage configuration, and operations. Production checklist:
 
 1. Set all required env vars (service-role key server-only).
-2. Apply migrations `0000`–`0006` in order.
+2. Apply migrations `0000`–`0010` in order.
 3. Create Storage buckets `project-documents`, `task-attachments` (private;
    created by `0004`, policies by `0005`).
 4. `npm run build && npm start`.

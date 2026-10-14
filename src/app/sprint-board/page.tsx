@@ -41,8 +41,9 @@ import { formatDate, formatRelativeTime } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
 const SPRINTS_PAGE_SIZE = 50;
-// Bounded board fetch: one page of at most 100 tasks, grouped client-side by
-// column_status. Full server pagination still applies (see footer note).
+// Bounded board fetch: one page of at most 100 tasks from the sprint's
+// project, then filter client-side to the selected sprint. This keeps the board
+// aligned with the same task data source used by Sprint Planning.
 const BOARD_PAGE_SIZE = 100;
 
 const COLUMNS = [
@@ -105,6 +106,14 @@ export default function SprintBoardPage() {
   const [view, setView] = React.useState<"kanban" | "list">("kanban");
   const [sprintIndex, setSprintIndex] = React.useState(0);
 
+  // If Sprint Planning opened this board for a specific sprint, remember that ID.
+  const [requestedSprintId, setRequestedSprintId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const sprintId = new URLSearchParams(window.location.search).get("sprintId");
+    setRequestedSprintId(sprintId);
+  }, []);
+
   const sprintsQuery = React.useMemo(
     () => buildQuery({ page: 1, pageSize: SPRINTS_PAGE_SIZE }),
     [],
@@ -116,6 +125,27 @@ export default function SprintBoardPage() {
     retry: retrySprints,
   } = useCollection<SprintItem>("/api/sprints", normalizeSprint, sprintsQuery);
 
+  React.useEffect(() => {
+    if (sprints.length === 0) return;
+
+    if (requestedSprintId) {
+      const requestedIndex = sprints.findIndex(
+        (sprint) => sprint.id === requestedSprintId,
+      );
+
+      if (requestedIndex >= 0) {
+        setSprintIndex(requestedIndex);
+        return;
+      }
+    }
+
+    // Without a requested sprint, prefer the active sprint; otherwise use the first.
+    const activeIndex = sprints.findIndex((sprint) => sprint.status === "active");
+    if (activeIndex >= 0) {
+      setSprintIndex(activeIndex);
+    }
+  }, [sprints, requestedSprintId]);
+
   const selectedSprint =
     sprints.length === 0
       ? null
@@ -125,7 +155,7 @@ export default function SprintBoardPage() {
     () =>
       selectedSprint
         ? buildQuery({
-            sprintId: selectedSprint.id,
+            projectId: selectedSprint.projectId,
             page: 1,
             pageSize: BOARD_PAGE_SIZE,
           })
@@ -151,13 +181,32 @@ export default function SprintBoardPage() {
   const [moveError, setMoveError] = React.useState<string | null>(null);
 
   const boardTasks = selectedSprint
-    ? tasks.map((task) =>
-        statusOverrides[task.id] !== undefined
-          ? { ...task, columnStatus: statusOverrides[task.id] as string }
-          : task,
-      )
+    ? tasks
+        .filter((task) => task.sprintId === selectedSprint.id)
+        .map((task) =>
+          statusOverrides[task.id] !== undefined
+            ? { ...task, columnStatus: statusOverrides[task.id] as string }
+            : task,
+        )
     : [];
-  const countFor = (columnId: string): number =>
+
+  const totalPoints = boardTasks.reduce(
+  (sum, task) => sum + (task.points ?? 0),
+  0,
+);
+
+const completedPoints = boardTasks
+  .filter((task) => task.columnStatus === "done")
+  .reduce((sum, task) => sum + (task.points ?? 0), 0);
+
+const remainingPoints = totalPoints - completedPoints;
+
+const boardProgress =
+  totalPoints > 0
+    ? Math.round((completedPoints / totalPoints) * 100)
+    : 0;
+
+    const countFor = (columnId: string): number =>
     boardTasks.filter((task) => task.columnStatus === columnId).length;
 
   // Drop overrides the backend has confirmed so the server stays the source
@@ -368,13 +417,13 @@ export default function SprintBoardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Progress</p>
-                <p className="text-xl font-bold text-slate-900">{sprintProgress(selectedSprint)}%</p>
+                <p className="text-xl font-bold text-slate-900">{boardProgress}%</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center">
                 <Target className="h-5 w-5 text-blue-600" />
               </div>
             </div>
-            <Progress value={sprintProgress(selectedSprint)} size="sm" className="mt-3" />
+            <Progress value={boardProgress} size="sm" className="mt-3" />
           </CardContent>
         </Card>
         <Card>
@@ -382,7 +431,7 @@ export default function SprintBoardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Total Points</p>
-                <p className="text-xl font-bold text-slate-900">{selectedSprint.totalPoints ?? "—"}</p>
+                <p className="text-xl font-bold text-slate-900">{totalPoints}</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-violet-50 flex items-center justify-center">
                 <Flag className="h-5 w-5 text-violet-600" />
@@ -395,7 +444,7 @@ export default function SprintBoardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Completed</p>
-                <p className="text-xl font-bold text-emerald-600">{selectedSprint.completedPoints ?? "—"}</p>
+                <p className="text-xl font-bold text-emerald-600">{completedPoints}</p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-emerald-50 flex items-center justify-center">
                 <Play className="h-5 w-5 text-emerald-600" />
@@ -409,9 +458,7 @@ export default function SprintBoardPage() {
               <div>
                 <p className="text-sm text-slate-500">Remaining</p>
                 <p className="text-xl font-bold text-slate-900">
-                  {selectedSprint.totalPoints !== null && selectedSprint.completedPoints !== null
-                    ? selectedSprint.totalPoints - selectedSprint.completedPoints
-                    : "—"}
+                  {remainingPoints}
                 </p>
               </div>
               <div className="h-10 w-10 rounded-lg bg-amber-50 flex items-center justify-center">

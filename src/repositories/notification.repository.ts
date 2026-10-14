@@ -21,6 +21,9 @@ export interface NotificationRow {
   priority: string;
   read: boolean;
   action_label: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  action_url: string | null;
   created_at: string;
 }
 
@@ -38,7 +41,7 @@ export interface NotificationRow {
  * server lane. Only the `read` flag is ever mutated here.
  */
 const NOTIFICATION_SELECT =
-  "id,user_id,type,title,description,priority,read,action_label,created_at";
+  "id,user_id,type,title,description,priority,read,action_label,entity_type,entity_id,action_url,created_at";
 
 export async function listNotifications(
   client: SupabaseClient,

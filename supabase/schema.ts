@@ -216,6 +216,7 @@ export const backlog = pgTable("backlog", {
 	projectId: uuid("project_id").notNull(),
 	requirementId: uuid("requirement_id").notNull(),
 	rank: integer().notNull(),
+	commitmentId: uuid("commitment_id"),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
@@ -228,8 +229,44 @@ export const backlog = pgTable("backlog", {
 		foreignColumns: [requirements.id],
 		name: "backlog_requirement_id_fkey"
 	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.commitmentId],
+		foreignColumns: [commitments.id],
+		name: "backlog_commitment_id_fkey"
+	}).onDelete("set null"),
 	unique("backlog_requirement_id_key").on(table.requirementId),
 	index("idx_backlog_project_id").using("btree", table.projectId.asc().nullsLast().op("uuid_ops")),
+	index("idx_backlog_commitment_id").using("btree", table.commitmentId.asc().nullsLast().op("uuid_ops")),
+])
+
+export const commitments = pgTable("commitments", {
+	id: uuid().defaultRandom().primaryKey().notNull(),
+	projectId: uuid("project_id").notNull(),
+	title: text().notNull(),
+	description: text(),
+	commitmentType: text("commitment_type").default('deliverable').notNull(),
+	status: text().default('planned').notNull(),
+	dueDate: date("due_date"),
+	progress: integer().default(0).notNull(),
+	ownerId: uuid("owner_id"),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	foreignKey({
+		columns: [table.projectId],
+		foreignColumns: [projects.id],
+		name: "commitments_project_id_fkey"
+	}).onDelete("cascade"),
+	foreignKey({
+		columns: [table.ownerId],
+		foreignColumns: [users.id],
+		name: "commitments_owner_id_fkey"
+	}).onDelete("set null"),
+	index("idx_commitments_project_id").using("btree", table.projectId.asc().nullsLast().op("uuid_ops")),
+	index("idx_commitments_owner_id").using("btree", table.ownerId.asc().nullsLast().op("uuid_ops")),
+	check("commitments_progress_check", sql`(progress >= 0) AND (progress <= 100)`),
+	check("commitments_type_check", sql`commitment_type IN ('outcome', 'deliverable', 'milestone', 'obligation')`),
+	check("commitments_status_check", sql`status IN ('planned', 'inProgress', 'completed', 'blocked')`),
 ])
 
 export const tasks = pgTable("tasks", {
@@ -353,6 +390,9 @@ export const notifications = pgTable("notifications", {
 	priority: priorityLevel().default('medium').notNull(),
 	read: boolean().default(false).notNull(),
 	actionLabel: text("action_label"),
+	entityType: text("entity_type"),
+	entityId: uuid("entity_id"),
+	actionUrl: text("action_url"),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	index("idx_notifications_user_id").using("btree", table.userId.asc().nullsLast().op("uuid_ops")),
@@ -471,6 +511,7 @@ export const approvals = pgTable("approvals", {
 	requestedAt: timestamp("requested_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	decidedAt: timestamp("decided_at", { withTimezone: true, mode: 'string' }),
 	decidedBy: uuid("decided_by"),
+	decidedReason: text("decided_reason"),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({

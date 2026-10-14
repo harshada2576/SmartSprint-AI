@@ -104,6 +104,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         title: `Sprint ${sprint.name} Started`,
         description: `Sprint ${sprint.name} is now active. Check your assigned tasks on the Sprint Board.`,
         priority: "high",
+        entityType: "sprint",
+        entityId: sprintId,
+        actionUrl: `/sprint-board?sprintId=${sprintId}`,
       });
     }
 

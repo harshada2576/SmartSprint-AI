@@ -21,6 +21,8 @@ import {
 } from "@/api/response";
 import { isUuid } from "@/schemas/query-params";
 import type { AppRole } from "@/types/api";
+import { db } from "@/db";
+import { activityLogs } from "@supabase/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,65 @@ const TABLE: Record<GovernanceResource, string> = {
   changes: "change_requests",
   milestones: "milestones",
 };
+
+/** Maximum stored length for an approval decision rationale. */
+const MAX_DECISION_REASON_LENGTH = 2000;
+
+type GovernanceAuditAction =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "approved"
+  | "rejected";
+
+/**
+ * Writes the governance audit trail. Runs on the privileged Drizzle lane
+ * (client inserts into `activity_logs` are denied by RLS by design) after
+ * authorization is established — same trusted-lane pattern as the sprint,
+ * task, invitation, and AI-approval routes.
+ */
+async function logGovernanceActivity(input: {
+  organizationId: string;
+  projectId: string;
+  userId: string;
+  action: GovernanceAuditAction;
+  entityType: "budget" | "approval" | "change_request" | null;
+  entityId: string;
+  value: string;
+}): Promise<void> {
+  await db.insert(activityLogs).values({
+    organizationId: input.organizationId,
+    projectId: input.projectId,
+    userId: input.userId,
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    value: input.value,
+  });
+}
+
+/**
+ * Parses the optional decision rationale (`reason`). Empty strings clear
+ * to null; over-long input is a 400, never silently truncated.
+ */
+function parseDecisionReason(
+  body: Record<string, unknown>,
+): { ok: true; reason: string | null } | { ok: false } {
+  const raw = body.reason ?? body.decidedReason ?? body.decided_reason;
+  if (raw === undefined || raw === null) {
+    return { ok: true, reason: null };
+  }
+  if (typeof raw !== "string") {
+    return { ok: false };
+  }
+  if (raw.trim() === "") {
+    return { ok: true, reason: null };
+  }
+  if (raw.trim().length > MAX_DECISION_REASON_LENGTH) {
+    return { ok: false };
+  }
+  return { ok: true, reason: raw.trim() };
+}
 
 async function loadRow(
   supabase: Parameters<typeof isProjectAccessible>[0],
@@ -164,6 +225,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           "This approval is already decided",
         );
       }
+      const parsedReason = parseDecisionReason(body);
+      if (!parsedReason.ok) {
+        return validationErrorResponse(
+          [
+            {
+              field: "reason",
+              message: `reason must be a string of at most ${MAX_DECISION_REASON_LENGTH} characters`,
+            },
+          ],
+        );
+      }
       const now = new Date().toISOString();
       const { data: updated, error } = await supabase
         .from("approvals")
@@ -171,6 +243,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           status: decision,
           decided_by: user.id,
           decided_at: now,
+          decided_reason: parsedReason.reason,
         })
         .eq("id", id)
         .select("*")
@@ -181,6 +254,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: decision === "approved" ? "approved" : "rejected",
+        entityType: "approval",
+        entityId: id,
+        value:
+          `Approval "${String(row.title ?? id)}" ${decision}` +
+          (parsedReason.reason ? `: ${parsedReason.reason}` : ""),
+      });
       return successResponse(updated);
     }
 
@@ -223,6 +307,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: decision === "approved" ? "approved" : "rejected",
+        entityType: "change_request",
+        entityId: id,
+        value: `Change request "${String(row.title ?? id)}" ${decision}`,
+      });
       return successResponse(updated);
     }
 
@@ -267,6 +360,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: "updated",
+        entityType: resource === "budget" ? "budget" : null,
+        entityId: id,
+        value: `${resource === "budget" ? "Budget line" : "Contract"} "${String(row.name ?? row.category ?? id)}" updated`,
+      });
       return successResponse(updated);
     }
 
@@ -304,6 +406,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
       throw error;
     }
+    await logGovernanceActivity({
+      organizationId: orgId,
+      projectId,
+      userId: user.id,
+      action: "updated",
+      entityType: null,
+      entityId: id,
+      value: `Milestone "${String(row.name ?? id)}" updated`,
+    });
     return successResponse(updated);
   } catch (error) {
     console.error("PATCH /api/governance/[id] failed:", error);
@@ -367,6 +478,22 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       }
       throw error;
     }
+    await logGovernanceActivity({
+      organizationId: orgId,
+      projectId: row.project_id,
+      userId: user.id,
+      action: "deleted",
+      entityType:
+        resource === "approvals"
+          ? "approval"
+          : resource === "changes"
+            ? "change_request"
+            : resource === "budget"
+              ? "budget"
+              : null,
+      entityId: id,
+      value: `${resource} record deleted`,
+    });
     return successResponse({ id, deleted: true });
   } catch (error) {
     console.error("DELETE /api/governance/[id] failed:", error);

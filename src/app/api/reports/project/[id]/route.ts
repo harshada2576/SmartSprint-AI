@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedContext, resolveRequestScope } from "@/api/auth";
 import { isProjectAccessible } from "@/api/access";
-import { notFoundResponse } from "@/api/response";
+import {
+  internalErrorResponse,
+  notFoundResponse,
+  validationErrorResponse,
+} from "@/api/response";
+import { isUuid } from "@/schemas/query-params";
 import { db } from "@supabase/client";
 import { projects, tasks, sprints, risks, users } from "@supabase/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
@@ -15,8 +20,10 @@ export async function GET(
     if ("response" in auth) return auth.response;
 
     const { id: projectId } = await params;
-    if (!projectId) {
-      return NextResponse.json({ error: "Project ID is required" }, { status: 400 });
+    if (!projectId || !isUuid(projectId)) {
+      return validationErrorResponse([
+        { field: "projectId", message: "Project id must be a valid UUID" },
+      ]);
     }
 
     // Scope probe (RLS): HR has zero project/report access; FINANCE/LEGAL
@@ -36,7 +43,7 @@ export async function GET(
       .limit(1);
 
     if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return notFoundResponse("Project not found");
     }
 
     // Fetch tasks
@@ -57,9 +64,25 @@ export async function GET(
       .from(risks)
       .where(eq(risks.projectId, projectId));
 
-    // Fetch users for developer workload
-    const allUsers = await db.select().from(users);
-    const userMap = new Map(allUsers.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim() || u.email]));
+    // Developer names are resolved only for assignees on this project's
+    // tasks (scoped lookup — never a full users-table scan).
+    const assigneeIds = Array.from(
+      new Set(
+        projectTasks
+          .map((t) => t.assigneeId)
+          .filter((id): id is string => typeof id === "string"),
+      ),
+    );
+    const userMap = new Map<string, string>();
+    if (assigneeIds.length > 0) {
+      const scopedUsers = await db
+        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email })
+        .from(users)
+        .where(inArray(users.id, assigneeIds));
+      for (const u of scopedUsers) {
+        userMap.set(u.id, `${u.firstName} ${u.lastName}`.trim() || u.email);
+      }
+    }
 
     const totalTasks = projectTasks.length;
     const completedTasks = projectTasks.filter(
@@ -72,12 +95,11 @@ export async function GET(
       (t) => t.columnStatus === "inProgress"
     ).length;
     const now = new Date();
-    const overdueTasks = projectTasks.filter(
-      (t) =>
-        t.dueDate &&
-        new Date(t.dueDate) < now &&
-        t.columnStatus !== "done"
-    ).length;
+    const overdueTasks = projectTasks.filter((t) => {
+      if (!t.dueDate || t.columnStatus === "done") return false;
+      const due = new Date(t.dueDate);
+      return !Number.isNaN(due.getTime()) && due < now;
+    }).length;
 
     const completedPoints = projectTasks
       .filter((t) => t.columnStatus === "done")
@@ -191,11 +213,8 @@ export async function GET(
     }
 
     return NextResponse.json({ success: true, data: reportData });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Project report error:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
-      { status: 500 }
-    );
+    return internalErrorResponse();
   }
 }

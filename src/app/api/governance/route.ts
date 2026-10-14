@@ -23,6 +23,8 @@ import {
 } from "@/api/response";
 import { isUuid } from "@/schemas/query-params";
 import type { AppRole } from "@/types/api";
+import { db } from "@/db";
+import { activityLogs } from "@supabase/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +50,39 @@ function parseResource(value: string | null): GovernanceResource | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+type GovernanceAuditAction =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "approved"
+  | "rejected";
+
+/**
+ * Writes the governance audit trail. Runs on the privileged Drizzle lane
+ * (client inserts into `activity_logs` are denied by RLS by design) after
+ * authorization is established — same trusted-lane pattern as the sprint,
+ * task, invitation, and AI-approval routes.
+ */
+async function logGovernanceActivity(input: {
+  organizationId: string;
+  projectId: string;
+  userId: string;
+  action: GovernanceAuditAction;
+  entityType: "budget" | "approval" | "change_request" | null;
+  entityId: string;
+  value: string;
+}): Promise<void> {
+  await db.insert(activityLogs).values({
+    organizationId: input.organizationId,
+    projectId: input.projectId,
+    userId: input.userId,
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    value: input.value,
+  });
 }
 
 async function projectOrg(
@@ -215,6 +250,15 @@ export async function POST(request: NextRequest) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: "created",
+        entityType: "budget",
+        entityId: (data as { id: string }).id,
+        value: `Budget line "${category}" created (${allocated})`,
+      });
       return createdResponse(data);
     }
 
@@ -258,6 +302,15 @@ export async function POST(request: NextRequest) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: "created",
+        entityType: null,
+        entityId: (data as { id: string }).id,
+        value: `Contract "${name}" with ${vendor} created`,
+      });
       return createdResponse(data);
     }
 
@@ -281,6 +334,32 @@ export async function POST(request: NextRequest) {
       if (!maySubmitApproval(role, type)) {
         return forbiddenResponse(
           "Your role cannot submit this approval type",
+        );
+      }
+      // Duplicate-submit guard: the same requester cannot stack identical
+      // pending requests (same project + type + title). Re-submission is
+      // allowed once the earlier row is decided.
+      const { data: pendingDup, error: dupError } = await supabase
+        .from("approvals")
+        .select("id")
+        .eq("project_id", projectId)
+        .eq("type", type)
+        .eq("title", title)
+        .eq("requester_id", user.id)
+        .eq("status", "pending")
+        .limit(1)
+        .maybeSingle();
+      if (dupError) throw dupError;
+      if (pendingDup) {
+        return validationErrorResponse(
+          [
+            {
+              field: "title",
+              message:
+                "An identical pending approval already exists for this project and type",
+            },
+          ],
+          "Duplicate pending approval",
         );
       }
       const { data, error } = await supabase
@@ -307,6 +386,15 @@ export async function POST(request: NextRequest) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: "created",
+        entityType: "approval",
+        entityId: (data as { id: string }).id,
+        value: `${type} approval "${title}" submitted`,
+      });
       return createdResponse(data);
     }
 
@@ -347,6 +435,15 @@ export async function POST(request: NextRequest) {
         }
         throw error;
       }
+      await logGovernanceActivity({
+        organizationId: orgId,
+        projectId,
+        userId: user.id,
+        action: "created",
+        entityType: "change_request",
+        entityId: (data as { id: string }).id,
+        value: `Change request "${title}" submitted`,
+      });
       return createdResponse(data);
     }
 
@@ -379,6 +476,15 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
+    await logGovernanceActivity({
+      organizationId: orgId,
+      projectId,
+      userId: user.id,
+      action: "created",
+      entityType: null,
+      entityId: (data as { id: string }).id,
+      value: `Milestone "${name}" created (target ${targetDate})`,
+    });
     return createdResponse(data);
   } catch (error) {
     console.error("POST /api/governance failed:", error);

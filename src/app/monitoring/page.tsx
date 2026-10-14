@@ -170,19 +170,19 @@ export default function MonitoringPage() {
   const getHealthBadge = (status: string) => {
     switch (status) {
       case "healthy":
-        return <Badge variant="success">HEALTHY (90-100)</Badge>;
+        return <Badge variant="success">HEALTHY (80-100)</Badge>;
       case "attention":
-        return <Badge variant="warning">ATTENTION (70-89)</Badge>;
+        return <Badge variant="warning">ATTENTION (55-79)</Badge>;
       case "critical":
-        return <Badge variant="danger">CRITICAL (&lt;70)</Badge>;
+        return <Badge variant="danger">CRITICAL (&lt;55)</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
   const getHealthColor = (score: number) => {
-    if (score >= 90) return "text-emerald-500";
-    if (score >= 70) return "text-amber-500";
+    if (score >= 80) return "text-emerald-500";
+    if (score >= 55) return "text-amber-500";
     return "text-red-500";
   };
 

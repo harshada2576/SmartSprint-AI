@@ -13,7 +13,9 @@ import {
   forbiddenResponse,
   internalErrorResponse,
   successResponse,
+  validationErrorResponse,
 } from "@/api/response";
+import { isUuid } from "@/schemas/query-params";
 import { validateAiRecommendationQuery } from "@/schemas/ai-recommendation-query";
 import { mayViewAiRecommendations } from "@/services/rbac";
 import { listAiRecommendations } from "@/repositories/ai-recommendation.repository";
@@ -134,8 +136,17 @@ export async function POST(request: NextRequest) {
         "projectId" in body &&
         body.projectId !== undefined
       ) {
-        if (typeof body.projectId !== "string") {
-          return forbiddenResponse();
+        if (
+          typeof body.projectId !== "string" ||
+          !isUuid(body.projectId)
+        ) {
+          return validationErrorResponse([
+            {
+              field: "projectId",
+              message:
+                'Field "projectId" must be a valid UUID',
+            },
+          ]);
         }
 
         projectId = body.projectId;

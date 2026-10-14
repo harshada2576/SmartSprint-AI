@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthenticatedContext, resolveRequestScope } from "@/api/auth";
 import { isSprintAccessible } from "@/api/access";
-import { notFoundResponse } from "@/api/response";
+import {
+  internalErrorResponse,
+  notFoundResponse,
+  validationErrorResponse,
+} from "@/api/response";
+import { isUuid } from "@/schemas/query-params";
 import { db } from "@supabase/client";
 import { sprints, tasks, projects, users } from "@supabase/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export async function GET(
   req: NextRequest,
@@ -15,8 +20,10 @@ export async function GET(
     if ("response" in auth) return auth.response;
 
     const { id: sprintId } = await params;
-    if (!sprintId) {
-      return NextResponse.json({ error: "Sprint ID is required" }, { status: 400 });
+    if (!sprintId || !isUuid(sprintId)) {
+      return validationErrorResponse([
+        { field: "sprintId", message: "Sprint id must be a valid UUID" },
+      ]);
     }
 
     // Scope probe (RLS): HR has zero project/report access; FINANCE/LEGAL
@@ -36,7 +43,7 @@ export async function GET(
       .limit(1);
 
     if (!sprint) {
-      return NextResponse.json({ error: "Sprint not found" }, { status: 404 });
+      return notFoundResponse("Sprint not found");
     }
 
     // Fetch parent project
@@ -52,8 +59,25 @@ export async function GET(
       .from(tasks)
       .where(eq(tasks.sprintId, sprintId));
 
-    const allUsers = await db.select().from(users);
-    const userMap = new Map(allUsers.map((u) => [u.id, `${u.firstName} ${u.lastName}`.trim() || u.email]));
+    // Developer names are resolved only for assignees on this sprint's
+    // tasks (scoped lookup — never a full users-table scan).
+    const assigneeIds = Array.from(
+      new Set(
+        sprintTasks
+          .map((t) => t.assigneeId)
+          .filter((id): id is string => typeof id === "string"),
+      ),
+    );
+    const userMap = new Map<string, string>();
+    if (assigneeIds.length > 0) {
+      const scopedUsers = await db
+        .select({ id: users.id, firstName: users.firstName, lastName: users.lastName, email: users.email })
+        .from(users)
+        .where(inArray(users.id, assigneeIds));
+      for (const u of scopedUsers) {
+        userMap.set(u.id, `${u.firstName} ${u.lastName}`.trim() || u.email);
+      }
+    }
 
     const plannedTasks = sprintTasks.length;
     const completedTasks = sprintTasks.filter(
@@ -174,11 +198,8 @@ export async function GET(
     }
 
     return NextResponse.json({ success: true, data: reportData });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Sprint report error:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error", details: error.message },
-      { status: 500 }
-    );
+    return internalErrorResponse();
   }
 }

@@ -49,11 +49,20 @@ export default function TeamPage() {
   // Invite modal state
   const [isInviteOpen, setIsInviteOpen] = React.useState(false);
   const [inviteEmail, setInviteEmail] = React.useState("");
-  const [inviteRole, setInviteRole] = React.useState<"PROJECT_MANAGER" | "DEVELOPER">("DEVELOPER");
+  const [inviteRole, setInviteRole] = React.useState<
+    "ADMIN" | "PROJECT_MANAGER" | "DEVELOPER" | "FINANCE" | "LEGAL" | "HR"
+  >("DEVELOPER");
   const [inviting, setInviting] = React.useState(false);
   const [inviteError, setInviteError] = React.useState<string | null>(null);
   const [createdInviteUrl, setCreatedInviteUrl] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
+
+  // The invitations endpoint returns all recent statuses; the
+  // "Pending Invitations" surfaces count and list pending rows only.
+  const pendingInvitations = React.useMemo(
+    () => invitations.filter((inv) => inv.status === "pending"),
+    [invitations],
+  );
 
   const fetchTeam = React.useCallback(async () => {
     try {
@@ -180,7 +189,7 @@ export default function TeamPage() {
         <Card className="border border-border">
           <CardContent className="pt-4">
             <div className="text-xs text-muted-foreground">Pending Invitations</div>
-            <div className="text-2xl font-bold mt-1">{invitations.length}</div>
+            <div className="text-2xl font-bold mt-1">{pendingInvitations.length}</div>
           </CardContent>
         </Card>
       </div>
@@ -188,7 +197,7 @@ export default function TeamPage() {
       <Tabs defaultValue="members">
         <TabsList>
           <TabsTrigger value="members">Team Members ({members.length})</TabsTrigger>
-          <TabsTrigger value="invitations">Pending Invitations ({invitations.length})</TabsTrigger>
+          <TabsTrigger value="invitations">Pending Invitations ({pendingInvitations.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="members" className="mt-4 space-y-4">
@@ -214,6 +223,9 @@ export default function TeamPage() {
                 <option value="ADMIN">Admin</option>
                 <option value="PROJECT_MANAGER">Project Manager</option>
                 <option value="DEVELOPER">Developer</option>
+                <option value="FINANCE">Finance</option>
+                <option value="LEGAL">Legal</option>
+                <option value="HR">HR</option>
               </select>
             </div>
           </div>
@@ -304,11 +316,11 @@ export default function TeamPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Pending Invitations</CardTitle>
               <CardDescription>
-                Outstanding invites for developers or managers to join the organization
+                Outstanding invites to join the organization
               </CardDescription>
             </CardHeader>
             <CardContent className="p-0">
-              {invitations.length === 0 ? (
+              {pendingInvitations.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Mail className="w-10 h-10 mx-auto mb-2 opacity-30" />
                   <p className="text-base font-semibold">No pending invitations</p>
@@ -326,7 +338,7 @@ export default function TeamPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {invitations.map((inv) => (
+                      {pendingInvitations.map((inv) => (
                         <tr key={inv.id} className="hover:bg-muted/30">
                           <td className="py-3 px-4 font-medium">{inv.email}</td>
                           <td className="py-3 px-4">
@@ -339,7 +351,7 @@ export default function TeamPage() {
                           </td>
                           <td className="py-3 px-4">
                             <Badge variant="warning" className="text-[10px]">
-                              PENDING
+                              {(inv.status ?? "pending").toUpperCase()}
                             </Badge>
                           </td>
                         </tr>
@@ -419,6 +431,10 @@ export default function TeamPage() {
               >
                 <option value="DEVELOPER">Developer</option>
                 <option value="PROJECT_MANAGER">Project Manager</option>
+                <option value="FINANCE">Finance</option>
+                <option value="LEGAL">Legal</option>
+                <option value="HR">HR</option>
+                <option value="ADMIN">Admin</option>
               </select>
             </div>
             <div className="flex justify-end gap-2 pt-2">

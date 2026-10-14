@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import {
   getAuthenticatedContext,
@@ -30,6 +31,26 @@ const FILE_TYPES = new Set([
   "spreadsheet",
   "other",
 ]);
+
+/** Maximum accepted upload size (50MB, per the storage audit). */
+const MAX_FILE_SIZE_MB = 50;
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
+/**
+ * Builds the Storage object path for a new document. The basename is
+ * stripped of directories and traversal sequences, restricted to a safe
+ * alphabet, and namespaced under the project id plus a random uuid so
+ * concurrent uploads of the same filename never collide.
+ */
+function buildStoragePath(projectId: string, name: string): string {
+  const basename = name.split("/").pop()?.split("\\").pop() ?? "file";
+  const sanitized =
+    basename
+      .replace(/[^a-zA-Z0-9._-]/g, "_")
+      .replace(/_+/g, "_")
+      .slice(0, 120) || "file";
+  return `${projectId}/${randomUUID()}/${sanitized}`;
+}
 
 async function checkDocumentAccess(
   supabase: Parameters<typeof isProjectAccessible>[0],
@@ -157,13 +178,21 @@ export async function POST(request: NextRequest) {
         { field: "fileSize", message: "fileSize must be a positive number" },
       ]);
     }
-    const storagePath =
-      typeof body.storagePath === "string" ? body.storagePath.trim() : "";
-    if (!storagePath) {
+    if (fileSize > MAX_FILE_SIZE_BYTES) {
       return validationErrorResponse([
-        { field: "storagePath", message: "storagePath is required" },
+        {
+          field: "fileSize",
+          message: `fileSize must not exceed ${MAX_FILE_SIZE_MB}MB`,
+        },
       ]);
     }
+    // The storage path is always server-generated
+    // (`<projectId>/<uuid>/<sanitized-name>`): client-supplied paths are
+    // ignored, so traversal (`../`) and cross-project grafts are
+    // impossible. The returned path is what the client uploads through
+    // the signed-URL flow, matching the storage INSERT policy order
+    // (metadata row first, object second).
+    const storagePath = buildStoragePath(projectId, name);
     const folderId =
       typeof body.folderId === "string" && isUuid(body.folderId)
         ? body.folderId

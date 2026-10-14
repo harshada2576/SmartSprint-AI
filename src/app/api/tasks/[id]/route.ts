@@ -237,6 +237,9 @@ async function notifyProjectStaffOfBlockedTask(
         ? `Blocked: ${reason}`
         : "A task in your project was marked as blocked.",
       priority: "high",
+      entityType: "task",
+      entityId: taskId,
+      actionUrl: `/tasks/${taskId}`,
     });
   }
 }

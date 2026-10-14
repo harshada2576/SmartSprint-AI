@@ -647,7 +647,7 @@ describe("RLS foundation contract (static)", () => {
 
   describe("live RLS verification gate (requires reachable database)", () => {
     it.skipIf(!isLiveEnvConfigured())(
-      "pg_tables shows rowsecurity on all 24 tables; pg_policies has 111 SmartSprint policies",
+      "pg_tables shows rowsecurity on all 25 tables; pg_policies has 116 SmartSprint policies",
       async (ctx) => {
         const live = await probeLiveDb();
         if (!live) {
@@ -662,7 +662,11 @@ describe("RLS foundation contract (static)", () => {
           );
           return (res.rows as Array<{ tablename: string }>).map((r) => r.tablename);
         });
-        for (const table of EXPECTED_TABLES) {
+        // 0007 adds the commitments table (RLS enabled, +5 policies);
+        // 0008 adds backlog.commitment_id only (no policies). The static
+        // 0002-scoped EXPECTED_TABLES above is intentionally untouched.
+        const LIVE_ONLY_TABLES = ["commitments"];
+        for (const table of [...EXPECTED_TABLES, ...LIVE_ONLY_TABLES]) {
           expect(tables, `rowsecurity off on ${table}`).toContain(table);
         }
         const livePolicyNames = await runAsPrivileged(async (client) => {
@@ -686,7 +690,7 @@ describe("RLS foundation contract (static)", () => {
           return (res.rows as Array<{ policyname: string }>).map((r) => r.policyname);
         });
         // Exact assertion against the migration text (source of truth): the
-        // live database must expose precisely the 111 policies the static
+        // live database must expose precisely the 116 policies the static
         // contract proves exist — no fewer (missing enforcement) and no more
         // (unexpected policies could be backdoors or drift).
         const migrationFiles = [
@@ -695,17 +699,18 @@ describe("RLS foundation contract (static)", () => {
           "0004_rbac_expansion.sql",
           "0005_rbac_rls_rewrite.sql",
           "0006_hr_member_removal.sql",
+          "0007_commitments.sql",
         ];
         const allMigrationsSql = migrationFiles
           .map((f) => fs.readFileSync(path.join(process.cwd(), "supabase", "migrations", f), "utf8"))
           .join("\n");
         const expectedPolicyNames = new Set(
-          [...allMigrationsSql.matchAll(/CREATE POLICY (\w+) ON (?:public\.)?(\w+)/g)].map(
+          [...allMigrationsSql.matchAll(/CREATE POLICY\s+(\w+)\s+ON\s+(?:public\.)?(\w+)/g)].map(
             (m) => m[1],
           ),
         );
-        expect(expectedPolicyNames.size).toBeGreaterThanOrEqual(111);
-        expect(livePolicyNames.length).toBeGreaterThanOrEqual(111);
+        expect(expectedPolicyNames.size).toBeGreaterThanOrEqual(116);
+        expect(livePolicyNames.length).toBeGreaterThanOrEqual(116);
         for (const name of livePolicyNames) {
           expect(
             expectedPolicyNames.has(name),

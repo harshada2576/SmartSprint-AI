@@ -136,6 +136,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         title: `New comment on ${task.display_id}`,
         description: content.length > 80 ? `${content.slice(0, 77)}...` : content,
         priority: "medium",
+        entityType: "task",
+        entityId: taskId,
+        actionUrl: `/tasks/${taskId}`,
       });
     }
 

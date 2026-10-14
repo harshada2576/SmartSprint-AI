@@ -15,6 +15,24 @@ const FEATURES = [
 const QUERY_BATCH_SIZE = 200;
 const UPDATE_BATCH_SIZE = 25;
 
+/**
+ * Maximum time to wait for the Python prediction process before killing
+ * it. Without a timeout a hung interpreter hangs the request (and the
+ * caller's connection) indefinitely. Overridable for slow hosts via
+ * `AI_PREDICT_TIMEOUT_MS`.
+ */
+const PREDICT_TIMEOUT_MS =
+  Number(process.env.AI_PREDICT_TIMEOUT_MS ?? "") > 0
+    ? Number(process.env.AI_PREDICT_TIMEOUT_MS)
+    : 120_000;
+
+/**
+ * Python interpreter used to spawn `predict_priority.py`. Defaults to
+ * `python`; override with `AI_PYTHON_BIN` (e.g. `python3`) on hosts
+ * where `python` is missing or points at Python 2.
+ */
+const PYTHON_BIN = process.env.AI_PYTHON_BIN ?? "python";
+
 interface RequirementForPrediction {
   id: string;
   project_id: string;
@@ -75,13 +93,38 @@ async function predictPriorities(
   );
 
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const settleResolve = (value: PredictionItem[]): void => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      }
+    };
+    const settleReject = (error: Error): void => {
+      if (!settled) {
+        settled = true;
+        clearTimeout(timer);
+        reject(error);
+      }
+    };
+
     const child = spawn(
-      "python",
+      PYTHON_BIN,
       [getPredictionScriptPath()],
       {
         stdio: ["pipe", "pipe", "pipe"],
       },
     );
+
+    const timer = setTimeout(() => {
+      child.kill();
+      settleReject(
+        new Error(
+          `AI prediction timed out after ${PREDICT_TIMEOUT_MS}ms`,
+        ),
+      );
+    }, PREDICT_TIMEOUT_MS);
 
     let stdout = "";
     let stderr = "";
@@ -95,12 +138,12 @@ async function predictPriorities(
     });
 
     child.on("error", (error) => {
-      reject(error);
+      settleReject(error);
     });
 
     child.on("close", (code) => {
       if (code !== 0) {
-        reject(
+        settleReject(
           new Error(
             stderr.trim() ||
               `Python prediction process exited with code ${code}`,
@@ -114,7 +157,7 @@ async function predictPriorities(
           JSON.parse(stdout.trim()) as PredictionBatchResult;
 
         if (!result.success || !result.predictions) {
-          reject(
+          settleReject(
             new Error(
               result.error ?? "ai_prediction_failed",
             ),
@@ -126,7 +169,7 @@ async function predictPriorities(
           result.predictions.length !==
           requirements.length
         ) {
-          reject(
+          settleReject(
             new Error(
               `Prediction count mismatch: expected ${requirements.length}, received ${result.predictions.length}`,
             ),
@@ -134,9 +177,9 @@ async function predictPriorities(
           return;
         }
 
-        resolve(result.predictions);
+        settleResolve(result.predictions);
       } catch (error) {
-        reject(
+        settleReject(
           new Error(
             `Invalid prediction response: ${
               error instanceof Error
@@ -149,7 +192,7 @@ async function predictPriorities(
     });
 
     child.stdin.on("error", (error) => {
-      reject(error);
+      settleReject(error);
     });
 
     child.stdin.write(payload);
@@ -190,8 +233,74 @@ function buildReasoning(
   ];
 }
 
-async function getExistingPredictions(
-  serviceSupabase: SupabaseClient,
+/**
+ * Per-row input guard: one malformed requirement must not poison the
+ * whole Python batch (the script fails closed on the first bad row).
+ * Loose by design — only shape is checked, never business semantics —
+ * so legacy categories or label-adjacent values still reach the model.
+ */
+export function isRowPredictable(
+  requirement: RequirementForPrediction,
+): boolean {  if (
+    typeof requirement.category !== "string" ||
+    requirement.category.trim() === ""
+  ) {
+    return false;
+  }
+  if (
+    typeof requirement.business_value !== "string" ||
+    requirement.business_value.trim() === ""
+  ) {
+    return false;
+  }
+  for (const numeric of [
+    requirement.customer_importance,
+    requirement.urgency,
+    requirement.risk,
+  ]) {
+    if (
+      numeric !== null &&
+      (typeof numeric !== "number" ||
+        !Number.isFinite(numeric))
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Per-row output guard: drops model outputs outside the serving
+ * contract (unknown label, confidence outside 0–100) instead of
+ * persisting them or failing the batch.
+ */
+export function isValidPredictionItem(
+  prediction: unknown,
+): prediction is PredictionItem {
+  if (typeof prediction !== "object" || prediction === null) {
+    return false;
+  }
+  const item = prediction as Partial<PredictionItem>;
+  if (
+    item.suggestedPriority !== "low" &&
+    item.suggestedPriority !== "medium" &&
+    item.suggestedPriority !== "high"
+  ) {
+    return false;
+  }
+  if (
+    item.confidenceScore !== undefined &&
+    (typeof item.confidenceScore !== "number" ||
+      !Number.isFinite(item.confidenceScore) ||
+      item.confidenceScore < 0 ||
+      item.confidenceScore > 100)
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function getExistingPredictions(  serviceSupabase: SupabaseClient,
   requirementIds: string[],
 ): Promise<ExistingPrediction[]> {
   const results: ExistingPrediction[] = [];
@@ -250,13 +359,22 @@ function buildPredictionRow(
   };
 }
 
+/**
+ * Overwrites a still-pending prediction with a fresh model output.
+ *
+ * The `.eq("recommendation_status", "pending")` guard is the TOCTOU fix:
+ * a PM/ADMIN approval landing between the `getExistingPredictions` read
+ * and this write must not be reverted to `pending` (which would also
+ * leave stale `approved_by/at` values behind). A zero-row update means
+ * the row was decided concurrently and counts as skipped, not failed.
+ */
 async function updatePendingPrediction(
   serviceSupabase: SupabaseClient,
   predictionId: string,
   requirement: RequirementForPrediction,
   prediction: PredictionItem,
-): Promise<void> {
-  const { error } = await serviceSupabase
+): Promise<"updated" | "stale" | "error"> {
+  const { data, error } = await serviceSupabase
     .from("ai_predictions")
     .update({
       suggested_priority:
@@ -274,11 +392,23 @@ async function updatePendingPrediction(
       ),
       recommendation_status: "pending",
     })
-    .eq("id", predictionId);
+    .eq("id", predictionId)
+    .eq("recommendation_status", "pending")
+    .select("id");
 
   if (error) {
-    throw error;
+    console.error(
+      `AI prediction update failed for ${requirement.id}:`,
+      error,
+    );
+    return "error";
   }
+
+  if (!data || data.length === 0) {
+    return "stale";
+  }
+
+  return "updated";
 }
 
 async function savePredictions(
@@ -385,29 +515,20 @@ async function savePredictions(
 
     const results = await Promise.all(
       batch.map(async (item) => {
-        try {
-          await updatePendingPrediction(
-            serviceSupabase,
-            item.predictionId,
-            item.requirement,
-            item.prediction,
-          );
-
-          return true;
-        } catch (error) {
-          console.error(
-            `AI prediction update failed for ${item.requirement.id}:`,
-            error,
-          );
-
-          return false;
-        }
+        return updatePendingPrediction(
+          serviceSupabase,
+          item.predictionId,
+          item.requirement,
+          item.prediction,
+        );
       }),
     );
 
-    analyzed += results.filter(Boolean).length;
+    analyzed += results.filter(
+      (outcome) => outcome !== "error",
+    ).length;
     failed += results.filter(
-      (success) => !success,
+      (outcome) => outcome === "error",
     ).length;
   }
 
@@ -457,9 +578,25 @@ export interface RunAiPrioritizationOptions {
   projectId?: string;
 }
 
+export type AiPrioritizationStatus =
+  | "empty"
+  | "complete"
+  | "partial"
+  | "unavailable";
+
 export interface RunAiPrioritizationResult {
   analyzed: number;
   failed: number;
+  /**
+   * Machine-readable outcome (additive; the `{ analyzed, failed }`
+   * contract is unchanged):
+   * - `empty`: no requirements in scope.
+   * - `complete`: every in-scope requirement analyzed.
+   * - `partial`: some rows analyzed, some failed.
+   * - `unavailable`: nothing analyzed (model down, or every row
+   *   failed input/output validation).
+   */
+  status: AiPrioritizationStatus;
 }
 
 export async function runAiPrioritization(
@@ -501,21 +638,80 @@ export async function runAiPrioritization(
     return {
       analyzed: 0,
       failed: 0,
+      status: "empty",
     };
   }
 
   const serviceSupabase =
     getServiceRoleClient();
 
-  try {
-    const predictions =
-      await predictPriorities(requirements);
-
-    return await savePredictions(
-      serviceSupabase,
-      requirements,
-      predictions,
+  const predictable = requirements.filter((requirement) => {
+    if (isRowPredictable(requirement)) {
+      return true;
+    }
+    console.error(
+      `AI prioritization input rejected for ${requirement.id}: malformed feature row`,
     );
+    return false;
+  });
+
+  const rejectedRows = requirements.length - predictable.length;
+
+  if (predictable.length === 0) {
+    return {
+      analyzed: 0,
+      failed: rejectedRows,
+      status: "unavailable",
+    };
+  }
+
+  try {
+    const rawPredictions =
+      await predictPriorities(predictable);
+
+    const validPairs = predictable
+      .map((requirement, index) => ({
+        requirement,
+        prediction: rawPredictions[index],
+      }))
+      .filter((pair) => {
+        if (
+          pair.prediction !== undefined &&
+          isValidPredictionItem(pair.prediction)
+        ) {
+          return true;
+        }
+        console.error(
+          `AI prioritization output rejected for ${pair.requirement.id}: contract violation`,
+        );
+        return false;
+      });
+
+    const rejectedOutputs =
+      predictable.length - validPairs.length;
+
+    const saved = await savePredictions(
+      serviceSupabase,
+      validPairs.map((pair) => pair.requirement),
+      validPairs.map(
+        (pair) => pair.prediction as PredictionItem,
+      ),
+    );
+
+    const analyzed = saved.analyzed;
+    const failed =
+      saved.failed + rejectedRows + rejectedOutputs;
+
+    return {
+      analyzed,
+      failed,
+      status:
+        analyzed === 0
+          ? "unavailable"
+          : failed === 0
+            ? "complete"
+            : "partial",
+    };
   } catch (error) {
     console.error(
       "AI prioritization failed:",
@@ -525,6 +721,7 @@ export async function runAiPrioritization(
     return {
       analyzed: 0,
       failed: requirements.length,
+      status: "unavailable",
     };
   }
 }

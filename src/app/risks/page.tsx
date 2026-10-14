@@ -45,6 +45,46 @@ interface RiskItem {
   createdAt: string;
 }
 
+const riskLevelValue: Record<RiskItem["probability"], number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+const getRiskExposure = (risk: RiskItem) =>
+  riskLevelValue[risk.probability] * riskLevelValue[risk.impact];
+
+const getExposureLabel = (exposure: number) => {
+  if (exposure >= 7) return "Critical";
+  if (exposure >= 5) return "High";
+  if (exposure >= 3) return "Medium";
+  return "Low";
+};
+
+/**
+ * Normalizes API risk rows (snake_case) into the camelCase `RiskItem`
+ * shape this page renders. The exposure math above reads
+ * `probability`/`impact`, which match in both shapes; the date and id
+ * links need the camelCase keys.
+ */
+const normalizeRisk = (row: Record<string, unknown>): RiskItem => ({
+  id: String(row.id ?? ""),
+  projectId: String(
+    row.projectId ?? row.project_id ?? "",
+  ),
+  taskId: (row.taskId ?? row.task_id ?? null) as string | null,
+  title: String(row.title ?? ""),
+  description: (row.description ?? null) as string | null,
+  probability: (row.probability ?? "medium") as RiskItem["probability"],
+  impact: (row.impact ?? "medium") as RiskItem["impact"],
+  mitigation: (row.mitigation ?? null) as string | null,
+  status: (row.status ?? "open") as RiskItem["status"],
+  source: (row.source ?? "manual") as RiskItem["source"],
+  createdAt: String(
+    row.createdAt ?? row.created_at ?? new Date().toISOString(),
+  ),
+});
+
 export default function RisksPage() {
   const { items: projects, isLoading: projectsLoading } = useCollection<ProjectItem>(
     "/api/projects",
@@ -77,7 +117,11 @@ export default function RisksPage() {
       const res = await fetch(url);
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setRisks(json.data);
+        setRisks(
+          json.data.map((row: unknown) =>
+            normalizeRisk((row ?? {}) as Record<string, unknown>),
+          ),
+        );
       }
     } catch {
       setRisks([]);
@@ -339,6 +383,28 @@ export default function RisksPage() {
                       >
                         {risk.source === "ai" ? "AI Detected" : "Manual"}
                       </Badge>
+                    </div>
+
+                    {/* Risk Exposure: Probability × Impact */}
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1">
+                        <span className="text-muted-foreground">Probability:</span>{" "}
+                        <span className="font-semibold capitalize">{risk.probability}</span>
+                      </span>
+                      <span className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1">
+                        <span className="text-muted-foreground">Impact:</span>{" "}
+                        <span className="font-semibold capitalize">{risk.impact}</span>
+                      </span>
+                      <span className="rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1">
+                        <span className="text-muted-foreground">Risk Exposure:</span>{" "}
+                        <span className="font-bold text-primary">
+                          {getRiskExposure(risk)}
+                        </span>
+                        <span className="text-muted-foreground"> / 9</span>
+                      </span>
+                      <span className="rounded-lg border border-border/60 bg-background px-2.5 py-1 font-semibold">
+                        {getExposureLabel(getRiskExposure(risk))}
+                      </span>
                     </div>
 
                     {risk.description && (
